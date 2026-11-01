@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Tab</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="../../public/icons/icon-48.png">
+</head>
+<body>
+  <div class="portal-container">
+    <!-- Top Navigation & Controls -->
+    <header class="portal-header">
+      <div class="header-clock" id="headerClock">12:00</div>
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle Theme"></button>
+        <button id="settingsBtn" class="icon-btn" title="Settings & Commands" aria-label="Settings"></button>
+      </div>
+    </header>
+
+    <!-- Main Centerpiece -->
+    <main class="portal-main">
+      <div class="search-section">
+        <div class="search-box-wrapper" id="searchBoxWrapper">
+          <div class="search-icon-slot" id="searchIconSlot"></div>
+          <input
+            type="text"
+            id="portalSearchInput"
+            class="portal-search-input"
+            placeholder="Search bookmarks, open tabs, history, or web..."
+            autocomplete="off"
+            spellcheck="false"
+            autofocus
+          >
+          <div class="search-kbd-hint">
+            <span class="kbd">↵</span> to select
+          </div>
+        </div>
+
+        <!-- Instant Dynamic Suggestions -->
+        <div class="suggestions-panel hidden" id="suggestionsPanel">
+          <ul class="suggestions-list" id="suggestionsList"></ul>
+        </div>
+      </div>
+
+      <!-- Quick Access Section (Pinned + Intelligent AI Suggestions) -->
+      <section class="shortcuts-section" id="shortcutsSection">
+        <div class="section-header">
+          <h2 class="section-title">Quick Access</h2>
+          <div class="intelligence-badge" id="aiStatusBadge" title="AI & Discovery Status">
+            <span class="badge-icon" id="aiBadgeIcon"></span>
+            <span class="badge-label" id="aiBadgeLabel">Intelligent Engine</span>
+          </div>
+        </div>
+        <div class="shortcuts-grid" id="shortcutsGrid"></div>
+      </section>
+
+      <!-- Contextual Explorations (Open Tabs & Bookmark Collections) -->
+      <section class="contextual-section" id="contextualSection">
+        <div class="tabs-nav">
+          <button class="nav-tab active" data-tab="open-tabs" id="tabOpenTabsBtn">Open Tabs</button>
+          <button class="nav-tab" data-tab="bookmarks" id="tabBookmarksBtn">Bookmarks</button>
+        </div>
+
+        <div class="tab-content" id="openTabsContent">
+          <div class="open-tabs-grid" id="openTabsGrid"></div>
+        </div>
+
+        <div class="tab-content hidden" id="bookmarksContent">
+          <div class="bookmarks-tree" id="bookmarksTree"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings & Quick Help Drawer -->
+    <div class="settings-modal-backdrop hidden" id="settingsModal">
+      <div class="settings-dialog">
+        <div class="settings-header">
+          <h3>Portal Preferences</h3>
+          <button class="icon-btn" id="closeSettingsBtn">&times;</button>
+        </div>
+        <div class="settings-body">
+          <div class="setting-item">
+            <label for="themeSelect">Theme</label>
+            <select id="themeSelect">
+              <option value="system">System Default</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="searchEngineSelect">Default Web Search</label>
+            <select id="searchEngineSelect">
+              <option value="google">Google</option>
+              <option value="duckduckgo">DuckDuckGo</option>
+              <option value="bing">Bing</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label>Floating Command Palette</label>
+            <div class="setting-desc">Press <span class="kbd">Alt+K</span> on any webpage to switch tabs and run browser commands.</div>
+          </div>
+          <div class="setting-item">
+            <label>Native Omnibox</label>
+            <div class="setting-desc">Type <span class="kbd">p</span> then press <span class="kbd">Space</span> in Chrome address bar.</div>
+          </div>
+          <div class="setting-item action-item">
+            <button class="btn danger-btn" id="clearDataBtn">Clear AI Recommendation Cache</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Minimal Footer -->
+    <footer class="portal-footer">
+      <span class="footer-hint">Press <span class="kbd">Alt+K</span> for Floating Palette on any page</span>
+      <span class="footer-status" id="footerStatus">Portal</span>
+    </footer>
+  </div>
+
+  <script type="module" src="newtab.ts"></script>
+</body>
+</html>
