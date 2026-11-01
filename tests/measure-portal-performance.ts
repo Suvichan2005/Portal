@@ -60,12 +60,22 @@ async function benchmarkPortal() {
   const avgTypingLatency = typingLatencies.reduce((a, b) => a + b, 0) / typingLatencies.length;
   console.log(`Average Keypress Response Latency: ${avgTypingLatency.toFixed(2)} ms`);
 
-  // 3. Floating Launcher Injection Latency
+  // 3. Floating Launcher Injection Latency via Service Worker
   const webPage = await context.newPage();
   await webPage.goto('https://example.com');
 
+  const targetUrl = webPage.url();
   const tInjectStart = performance.now();
-  await webPage.addScriptTag({ path: resolve(EXTENSION_PATH, 'overlay.js') });
+  await sw.evaluate(async (url: string) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((t: any) => t.url === url);
+    if (!tab || !tab.id) throw new Error('Tab not found');
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['overlay.js'],
+    });
+  }, targetUrl);
+
   await webPage.waitForSelector('#portal-floating-launcher-root', { state: 'visible' });
   const overlayLatency = performance.now() - tInjectStart;
 

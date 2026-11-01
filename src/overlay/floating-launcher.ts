@@ -1,14 +1,11 @@
-import { searchEngine } from '../core/search/engine';
-import { storage } from '../core/storage';
-import { SearchResult } from '../core/types';
-import { Icons } from '../core/icons/svg-icons';
-import { COMMANDS } from '../core/commands/registry';
+import { SearchResult, InitialLauncherState } from '../core/types';
+import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 
-(function initPortalOverlay() {
+(function initPortalFloatingLauncher() {
   const ROOT_ID = 'portal-floating-launcher-root';
   const existingRoot = document.getElementById(ROOT_ID);
 
-  // If already open, toggle off cleanly!
+  // If already open, toggle off cleanly
   if (existingRoot) {
     existingRoot.remove();
     return;
@@ -17,7 +14,7 @@ import { COMMANDS } from '../core/commands/registry';
   // Preserve previous active element to restore focus on close
   const previousActiveElement = document.activeElement as HTMLElement | null;
 
-  // Create host and Shadow Root for complete CSS isolation
+  // Create host and Shadow Root for complete CSS isolation from the host webpage
   const host = document.createElement('div');
   host.id = ROOT_ID;
   host.style.position = 'fixed';
@@ -37,7 +34,7 @@ import { COMMANDS } from '../core/commands/registry';
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", Arial, sans-serif;
     }
     :host {
       all: initial;
@@ -45,27 +42,27 @@ import { COMMANDS } from '../core/commands/registry';
     .scrim {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      padding-top: 15vh;
+      padding-top: 14vh;
       animation: fadeIn 0.15s ease-out;
     }
     .modal {
-      width: 620px;
-      max-width: 90vw;
-      background: #18181b;
-      color: #f4f4f5;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      width: 640px;
+      max-width: 92vw;
+      background: #141517;
+      color: #f4f4f6;
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 14px;
-      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      animation: slideDown 0.15s ease-out;
+      animation: slideDown 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .search-row {
       display: flex;
@@ -73,9 +70,10 @@ import { COMMANDS } from '../core/commands/registry';
       padding: 14px 18px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       gap: 12px;
+      background: rgba(255, 255, 255, 0.02);
     }
     .search-icon {
-      color: #a1a1aa;
+      color: #8e9099;
       display: flex;
       align-items: center;
     }
@@ -89,25 +87,47 @@ import { COMMANDS } from '../core/commands/registry';
       font-weight: 400;
     }
     input::placeholder {
-      color: #71717a;
+      color: #5e606a;
     }
-    .results-list {
-      max-height: 380px;
+    .kbd-tag {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #a1a1aa;
+    }
+    .content-area {
+      max-height: 420px;
       overflow-y: auto;
       padding: 8px;
-      list-style: none;
     }
-    .results-list::-webkit-scrollbar {
+    .content-area::-webkit-scrollbar {
       width: 6px;
     }
-    .results-list::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.15);
+    .content-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
       border-radius: 3px;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #5e606a;
+      padding: 8px 12px 4px 12px;
+    }
+    .results-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
     .result-item {
       display: flex;
       align-items: center;
-      padding: 10px 12px;
+      padding: 9px 12px;
       border-radius: 8px;
       cursor: pointer;
       gap: 12px;
@@ -118,13 +138,13 @@ import { COMMANDS } from '../core/commands/registry';
       background: rgba(255, 255, 255, 0.08);
     }
     .item-icon {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      color: #94a3b8;
+      color: #8e9099;
     }
     .item-icon img {
       width: 18px;
@@ -136,12 +156,12 @@ import { COMMANDS } from '../core/commands/registry';
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
     }
     .item-title {
       font-size: 14px;
       font-weight: 500;
-      color: #f4f4f5;
+      color: #f4f4f6;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -157,35 +177,66 @@ import { COMMANDS } from '../core/commands/registry';
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.5px;
-      padding: 3px 6px;
+      padding: 2px 6px;
       border-radius: 4px;
       background: rgba(99, 102, 241, 0.15);
-      color: #818cf8;
+      color: #a5b4fc;
       border: 1px solid rgba(99, 102, 241, 0.25);
       flex-shrink: 0;
+    }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      padding: 6px 10px 12px 10px;
+    }
+    .quick-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .quick-card:hover, .quick-card.selected {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-1px);
+    }
+    .quick-card .q-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: #f4f4f6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .footer {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 16px;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 9px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
       font-size: 11px;
       color: #71717a;
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.25);
     }
     .shortcuts {
       display: flex;
       gap: 12px;
     }
-    .kbd {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 3px;
-      padding: 1px 4px;
-      font-size: 10px;
-      font-family: monospace;
-      color: #d4d4d8;
+    .notice-bar {
+      font-size: 12px;
+      padding: 8px 12px;
+      margin: 8px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #c7d2fe;
+      border-radius: 6px;
+      display: none;
     }
     @keyframes fadeIn {
       from { opacity: 0; }
@@ -214,29 +265,42 @@ import { COMMANDS } from '../core/commands/registry';
 
   const input = document.createElement('input');
   input.type = 'text';
-  input.placeholder = 'Search tabs, bookmarks, history, or commands...';
+  input.placeholder = 'Search tabs, bookmarks, history, commands, or web...';
   input.autocomplete = 'off';
   input.spellcheck = false;
 
+  const kbdHint = document.createElement('span');
+  kbdHint.className = 'kbd-tag';
+  kbdHint.textContent = 'Alt+Q';
+
   searchRow.appendChild(searchIcon);
   searchRow.appendChild(input);
+  searchRow.appendChild(kbdHint);
+
+  const noticeBar = document.createElement('div');
+  noticeBar.className = 'notice-bar';
+
+  const contentArea = document.createElement('div');
+  contentArea.className = 'content-area';
 
   const resultsList = document.createElement('ul');
   resultsList.className = 'results-list';
+  contentArea.appendChild(resultsList);
 
   const footer = document.createElement('div');
   footer.className = 'footer';
   footer.innerHTML = `
     <div class="shortcuts">
-      <span><span class="kbd">↑↓</span> Navigate</span>
-      <span><span class="kbd">↵</span> Select</span>
-      <span><span class="kbd">Esc</span> Close</span>
+      <span><span class="kbd-tag">↑↓</span> Navigate</span>
+      <span><span class="kbd-tag">↵</span> Open / Switch</span>
+      <span><span class="kbd-tag">Esc</span> Close</span>
     </div>
     <div>Portal Launcher</div>
   `;
 
   modal.appendChild(searchRow);
-  modal.appendChild(resultsList);
+  modal.appendChild(noticeBar);
+  modal.appendChild(contentArea);
   modal.appendChild(footer);
   scrim.appendChild(modal);
   shadow.appendChild(scrim);
@@ -246,13 +310,17 @@ import { COMMANDS } from '../core/commands/registry';
   // State
   let currentResults: SearchResult[] = [];
   let selectedIndex = 0;
+  let initialState: InitialLauncherState | null = null;
+  let debounceTimer: any = null;
 
   // Cleanup helper
   function closeOverlay() {
     window.removeEventListener('keydown', handleGlobalKeydown, true);
     host.remove();
     if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
-      previousActiveElement.focus();
+      try {
+        previousActiveElement.focus();
+      } catch {}
     }
   }
 
@@ -263,16 +331,25 @@ import { COMMANDS } from '../core/commands/registry';
     }
   });
 
+  function showNotice(msg: string) {
+    noticeBar.textContent = msg;
+    noticeBar.style.display = 'block';
+    setTimeout(() => {
+      noticeBar.style.display = 'none';
+    }, 2500);
+  }
+
   // Render items
   function renderResults() {
     resultsList.innerHTML = '';
+
     if (currentResults.length === 0) {
       const empty = document.createElement('li');
-      empty.style.padding = '18px';
+      empty.style.padding = '24px';
       empty.style.textAlign = 'center';
       empty.style.color = '#71717a';
       empty.style.fontSize = '13px';
-      empty.textContent = 'No matching destinations or commands';
+      empty.textContent = 'No matching tabs, bookmarks, or commands';
       resultsList.appendChild(empty);
       return;
     }
@@ -287,18 +364,11 @@ import { COMMANDS } from '../core/commands/registry';
         const img = document.createElement('img');
         img.src = res.favicon;
         img.onerror = () => {
-          iconDiv.innerHTML = res.type === 'tab' ? Icons.tab : res.type === 'bookmark' ? Icons.bookmark : Icons.globe;
+          iconDiv.innerHTML = getResultIcon(res.type);
         };
         iconDiv.appendChild(img);
       } else {
-        iconDiv.innerHTML =
-          res.type === 'tab'
-            ? Icons.tab
-            : res.type === 'bookmark'
-              ? Icons.bookmark
-              : res.type === 'command'
-                ? Icons.command
-                : Icons.globe;
+        iconDiv.innerHTML = getResultIcon(res.type);
       }
 
       const info = document.createElement('div');
@@ -325,7 +395,7 @@ import { COMMANDS } from '../core/commands/registry';
         li.appendChild(badge);
       }
 
-      li.addEventListener('click', () => executeResult(res));
+      li.addEventListener('click', (e) => executeResult(res, e));
       li.addEventListener('mouseenter', () => {
         selectedIndex = idx;
         updateSelection();
@@ -335,6 +405,25 @@ import { COMMANDS } from '../core/commands/registry';
     });
 
     scrollSelectedIntoView();
+  }
+
+  function getResultIcon(type: string): string {
+    switch (type) {
+      case 'tab':
+        return Icons.tab;
+      case 'bookmark':
+        return Icons.bookmark;
+      case 'history':
+        return Icons.history;
+      case 'command':
+        return Icons.command;
+      case 'shortcut':
+        return Icons.pinFilled;
+      case 'ai_cluster':
+        return Icons.sparkles;
+      default:
+        return Icons.globe;
+    }
   }
 
   function updateSelection() {
@@ -355,47 +444,65 @@ import { COMMANDS } from '../core/commands/registry';
     }
   }
 
-  // Execute selected item
-  async function executeResult(item: SearchResult) {
-    closeOverlay();
+  // Execute selected item via runtime messaging to service worker!
+  async function executeResult(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
+    const modifiers = {
+      shift: e?.shiftKey,
+      alt: e?.altKey,
+      ctrl: e?.ctrlKey || (e as any)?.metaKey,
+    };
 
-    if (item.type === 'command' && item.commandId) {
-      const cmd = COMMANDS.find((c) => c.id === item.commandId);
-      if (cmd) {
-        await cmd.execute();
-      }
-      return;
-    }
+    // Send execution request to service worker first
+    chrome.runtime.sendMessage(
+      {
+        type: 'PORTAL_EXECUTE_ACTION',
+        item,
+        context: 'overlay',
+        modifiers,
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Portal Overlay] Action error:', chrome.runtime.lastError.message);
+        } else if (response && !response.success && response.message) {
+          console.warn('[Portal Overlay] Action failure:', response.message);
+        }
+      },
+    );
 
-    if (item.type === 'tab' && item.tabId) {
-      // Send message to background to switch tab
-      chrome.runtime.sendMessage({
-        action: 'switch-tab',
-        tabId: item.tabId,
-        windowId: item.windowId,
-      });
-      return;
-    }
-
-    if (item.url) {
-      window.location.href = item.url;
-    }
+    // Close overlay on next tick so DOM click events settle cleanly
+    setTimeout(closeOverlay, 25);
   }
 
-  // Live search
-  let debounceTimer: any = null;
-  async function performSearch(val: string) {
-    const prefs = await storage.getPreferences();
-    currentResults = await searchEngine.search(val, prefs);
-    selectedIndex = 0;
-    renderResults();
+  let searchSeq = 0;
+  // Live search via runtime messaging with sequence guard against out-of-order race conditions
+  function performSearch(val: string) {
+    const currentSeq = ++searchSeq;
+    chrome.runtime.sendMessage(
+      {
+        type: 'PORTAL_SEARCH',
+        query: val,
+        context: 'overlay',
+      },
+      (response) => {
+        if (currentSeq !== searchSeq) return; // Discard stale responses
+        if (chrome.runtime.lastError) {
+          console.warn('[Portal Overlay] Search message error:', chrome.runtime.lastError.message);
+          return;
+        }
+        if (response && response.results) {
+          currentResults = response.results;
+          selectedIndex = 0;
+          renderResults();
+        }
+      },
+    );
   }
 
   input.addEventListener('input', () => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       performSearch(input.value);
-    }, 40);
+    }, 35);
   });
 
   // Keyboard navigation
@@ -430,7 +537,7 @@ import { COMMANDS } from '../core/commands/registry';
     if (e.key === 'Enter') {
       e.preventDefault();
       if (currentResults[selectedIndex]) {
-        executeResult(currentResults[selectedIndex]);
+        executeResult(currentResults[selectedIndex], e);
       }
       return;
     }
@@ -438,7 +545,23 @@ import { COMMANDS } from '../core/commands/registry';
 
   window.addEventListener('keydown', handleGlobalKeydown, true);
 
-  // Initial render & focus
-  performSearch('');
-  setTimeout(() => input.focus(), 20);
+  // Initial load: fetch initial state from service worker
+  chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
+    if (chrome.runtime.lastError || !res) {
+      // Fallback: search immediately using current input
+      performSearch(input.value || '');
+      return;
+    }
+
+    initialState = res;
+    if (res.shortcutLabel) {
+      kbdHint.textContent = res.shortcutLabel;
+    }
+
+    // Trigger initial search if user hasn't typed yet, otherwise search their typed query
+    performSearch(input.value || '');
+  });
+
+  // Focus input automatically
+  setTimeout(() => input.focus(), 25);
 })();

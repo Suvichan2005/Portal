@@ -1,15 +1,15 @@
 :root {
-  --bg-color: #0c0d0e;
-  --surface-color: #141517;
-  --surface-hover: #1c1d21;
-  --surface-active: #24262b;
+  --bg-color: #0b0c0e;
+  --surface-color: #131417;
+  --surface-hover: #1b1c20;
+  --surface-active: #24252a;
   --border-color: rgba(255, 255, 255, 0.08);
   --border-hover: rgba(255, 255, 255, 0.16);
   --text-primary: #f4f4f6;
-  --text-secondary: #8e9099;
+  --text-secondary: #90929c;
   --text-muted: #5e606a;
   --accent-color: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.15);
+  --accent-glow: rgba(99, 102, 241, 0.18);
   --accent-text: #a5b4fc;
   --danger-color: #ef4444;
   --radius-sm: 6px;
@@ -32,7 +32,7 @@
   --text-secondary: #475569;
   --text-muted: #94a3b8;
   --accent-color: #4f46e5;
-  --accent-glow: rgba(79, 70, 229, 0.1);
+  --accent-glow: rgba(79, 70, 229, 0.12);
   --accent-text: #4338ca;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
@@ -51,7 +51,7 @@
     --text-secondary: #475569;
     --text-muted: #94a3b8;
     --accent-color: #4f46e5;
-    --accent-glow: rgba(79, 70, 229, 0.1);
+    --accent-glow: rgba(79, 70, 229, 0.12);
     --accent-text: #4338ca;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
@@ -75,7 +75,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  position: relative;
+  overflow-x: hidden;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Subtle atmospheric ambient glow behind the search box */
+.ambient-glow {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  height: 250px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.65;
+  filter: blur(40px);
 }
 
 .portal-container {
@@ -86,6 +103,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 
 /* Header */
@@ -93,7 +112,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 36px;
+  margin-bottom: 32px;
 }
 
 .header-clock {
@@ -138,7 +157,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 32px;
 }
 
 .search-section {
@@ -214,12 +233,15 @@ body {
   max-height: 420px;
   overflow-y: auto;
   z-index: 50;
-  animation: dropdownIn 0.15s ease-out;
+  animation: dropdownIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .suggestions-list {
   list-style: none;
   padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .suggestion-item {
@@ -238,8 +260,8 @@ body {
 }
 
 .suggestion-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -301,7 +323,7 @@ body {
 }
 
 .section-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
@@ -314,12 +336,18 @@ body {
   gap: 6px;
   font-size: 11px;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 12px;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
   color: var(--accent-text);
   cursor: help;
+  transition: all 0.15s ease;
+}
+
+.intelligence-badge:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
 }
 
 .intelligence-badge .badge-icon {
@@ -346,7 +374,7 @@ body {
   gap: 8px;
   text-decoration: none;
   color: inherit;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
   cursor: pointer;
 }
@@ -364,8 +392,8 @@ body {
 }
 
 .shortcut-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -414,12 +442,12 @@ body {
 }
 
 .shortcut-action-btn {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   border: none;
   color: var(--text-secondary);
   border-radius: 4px;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -433,18 +461,22 @@ body {
 
 .ai-pill {
   position: absolute;
-  top: 4px;
+  top: 5px;
   left: 6px;
   font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
   color: var(--accent-text);
-  opacity: 0.8;
+  background: var(--accent-glow);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 /* Contextual Section (Tabs & Bookmarks) */
 .contextual-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -480,11 +512,15 @@ body {
   background: var(--accent-glow);
 }
 
+.tab-content {
+  min-height: 80px;
+}
+
 .open-tabs-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 240px;
+  gap: 4px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -514,6 +550,7 @@ body {
 .tab-item-row .tab-icon img {
   width: 16px;
   height: 16px;
+  border-radius: 3px;
 }
 
 .tab-item-row .tab-title {
@@ -547,8 +584,8 @@ body {
 .bookmarks-tree {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 240px;
+  gap: 3px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -568,11 +605,29 @@ body {
   background: var(--surface-hover);
 }
 
+/* Toast Notification */
+.portal-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #18181b;
+  color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+  z-index: 200;
+  animation: slideUp 0.15s ease-out;
+}
+
 /* Settings Modal */
 .settings-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -682,4 +737,9 @@ body {
 @keyframes dropdownIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }

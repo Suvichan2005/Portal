@@ -1,25 +1,25 @@
 # PORTAL Build State
 
-**Last Updated:** 2026-11-02 04:12 UTC+5:30  
-**Phase:** 5 — Verified Production Extension  
+**Version:** 1.1.0  
+**Last Updated:** 2026-11-02 05:04 UTC+5:30  
+**Phase:** 6 — Verified v1.1.0 Release (Audited & Production-Ready)  
 **Branch:** main  
 
-## Completed Milestones
-- [x] Initialized Git repository and configured user-space portable Node.js toolchain (v22.11.0).
-- [x] Installed and configured Cua Driver (v0.38.0) and generated Antigravity MCP config.
-- [x] Installed Chrome Modern Web Guidance skills (`built-in-ai`, `prompt-api`, `accessibility`, `css`).
-- [x] Established empirical native Chrome New Tab page baseline (DOM Interactive: 18.3ms, Warm Navigation: 72.9ms).
-- [x] Built core multi-source search ranker (Tabs, Bookmarks, History, Commands, Top Sites, Aliases, Direct URL).
-- [x] Built dual-tier local intelligence engine:
-  - Tier 1: Real-time deterministic browsing pattern clustering & frequency-recency decay.
-  - Tier 2: Chrome Prompt API (`LanguageModel`) integration with structured JSON constraints.
-- [x] Built polished, minimal, typography-forward New Tab Page with Quick Access shortcuts and contextual explorations.
-- [x] Built on-demand injected Floating Command Palette (`overlay.js` IIFE bundle) with isolated Shadow DOM and keyboard trap.
-- [x] Verified full Playwright E2E browser test suite (8 of 8 journeys passing in real Chrome).
-- [x] Captured visual screenshots verifying rendering quality (`docs/screenshots/`).
-- [x] Benchmarked Portal performance:
-  - DOM Interactive: **44.8 ms** (vs 18.3 ms baseline)
-  - JS Heap: **3.24 MB** (budget <38 MB)
-  - Extension Bundle: **64.8 KB** (budget <250 KB)
-  - Idle Service Worker CPU: **0%**
-- [x] Formulated comprehensive project documentation and audit.
+## Audited Failures Corrected in v1.1.0
+- [x] **Privileged Execution in Overlay Fixed**: In MV3, injected content scripts lack access to `chrome.tabs`, `chrome.bookmarks`, `chrome.history`, and `chrome.sessions`. Floating launcher refactored into a thin client communicating via `chrome.runtime.sendMessage` (`PORTAL_SEARCH`, `PORTAL_EXECUTE_ACTION`, `PORTAL_GET_INITIAL_STATE`) to the central service worker.
+- [x] **Web Search Navigation Isolation Fixed**: Web searches and destination URLs executed from the floating launcher now open in a **new tab** via `chrome.tabs.create`, leaving the user's host webpage intact instead of replacing it.
+- [x] **Shortcut Rebinding to `Alt+Q`**: Registered `"Alt+Q"` in `manifest.json` commands, updated all UI shortcut badges and hint tags in both New Tab page and Floating Launcher.
+- [x] **Unified Search & Experience Parity**: Floating launcher now queries the identical multi-source ranker (`topSites`, open tabs, bookmarks, history, custom aliases, and commands) with full feature parity with the New Tab page.
+- [x] **Bookmark Tree Folder Navigation Added**: Added interactive folder expansion and bookmark navigation in the New Tab contextual section.
+- [x] **Toast Feedback System**: Added ambient notification toasts for user actions (pinning, clearing cache, theme toggles, command execution).
+
+## Quality & Performance Verification
+- [x] **10 of 10 Playwright E2E Tests Passing**: Verified in real Chrome browser with unpacked extension loaded.
+- [x] **Zero Remote Telemetry & Strict Local Privacy**: 100% offline-first. Zero external API calls, zero analytics.
+- [x] **Measured Performance**:
+  - DOM Interactive: **44.10 ms** (native baseline: 18.30 ms)
+  - JS Heap Memory: **3.27 MB** (budget <38 MB)
+  - Floating Launcher Summon Latency: **143.92 ms** (budget <200 ms)
+  - Keypress Response Latency: **82.94 ms** (smooth interaction)
+  - Total Extension Distribution Bundle: **62.8 KB** (budget <250 KB)
+  - Service Worker Idle CPU: **0%** (suspends cleanly)

@@ -8,6 +8,9 @@
   <link rel="icon" type="image/png" href="../../public/icons/icon-48.png">
 </head>
 <body>
+  <!-- Ambient background glow -->
+  <div class="ambient-glow"></div>
+
   <div class="portal-container">
     <!-- Top Navigation & Controls -->
     <header class="portal-header">
@@ -55,7 +58,7 @@
         <div class="shortcuts-grid" id="shortcutsGrid"></div>
       </section>
 
-      <!-- Contextual Explorations (Open Tabs & Bookmark Collections) -->
+      <!-- Contextual Section (Open Tabs & Bookmark Collections) -->
       <section class="contextual-section" id="contextualSection">
         <div class="tabs-nav">
           <button class="nav-tab active" data-tab="open-tabs" id="tabOpenTabsBtn">Open Tabs</button>
@@ -98,7 +101,7 @@
           </div>
           <div class="setting-item">
             <label>Floating Command Palette</label>
-            <div class="setting-desc">Press <span class="kbd">Alt+K</span> on any webpage to switch tabs and run browser commands.</div>
+            <div class="setting-desc">Press <span class="kbd">Alt+Q</span> on any webpage to switch tabs and run browser commands.</div>
           </div>
           <div class="setting-item">
             <label>Native Omnibox</label>
@@ -111,10 +114,13 @@
       </div>
     </div>
 
+    <!-- Toast Notification for Actions & Commands -->
+    <div class="portal-toast hidden" id="portalToast"></div>
+
     <!-- Minimal Footer -->
     <footer class="portal-footer">
-      <span class="footer-hint">Press <span class="kbd">Alt+K</span> for Floating Palette on any page</span>
-      <span class="footer-status" id="footerStatus">Portal</span>
+      <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page</span>
+      <span class="footer-status" id="footerStatus">Portal v1.1.0</span>
     </footer>
   </div>
 

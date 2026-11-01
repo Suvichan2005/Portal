@@ -53,6 +53,7 @@ export interface UserPreferences {
   showRecentTabs: boolean;
   showIntelligentShortcuts: boolean;
   reducedMotion: boolean;
+  density: 'compact' | 'comfortable';
 }
 
 export interface HistoryCluster {
@@ -80,5 +81,28 @@ export interface BrowserCommand {
   description: string;
   category: 'tabs' | 'navigation' | 'settings' | 'history';
   keywords: string[];
-  execute: () => Promise<void> | void;
+  execute: () => Promise<{ success: boolean; message?: string }> | { success: boolean; message?: string } | void;
 }
+
+export interface InitialLauncherState {
+  pinned: PinnedShortcut[];
+  recentClusters: HistoryCluster[];
+  openTabs: SearchResult[];
+  preferences: UserPreferences;
+  shortcutLabel: string;
+  modelStatus: string;
+}
+
+export type PortalMessage =
+  | { type: 'PORTAL_SEARCH'; query: string; context: 'overlay' | 'newtab' }
+  | {
+      type: 'PORTAL_EXECUTE_ACTION';
+      item: SearchResult;
+      context: 'overlay' | 'newtab';
+      modifiers?: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean };
+    }
+  | { type: 'PORTAL_GET_INITIAL_STATE'; context: 'overlay' | 'newtab' }
+  | { type: 'PORTAL_CLOSE_TAB'; tabId: number }
+  | { type: 'PORTAL_SWITCH_TAB'; tabId: number; windowId?: number }
+  | { type: 'PORTAL_DISMISS_SHORTCUT'; urlOrDomain: string }
+  | { type: 'PORTAL_PIN_SHORTCUT'; shortcut: Omit<PinnedShortcut, 'addedAt'> };

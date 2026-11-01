@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-hRsiyUFr.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/engine-BShda9TE.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-CZFAcQ2j.css">
+  <script type="module" crossorigin src="/assets/newtab-_AsgVZS-.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/engine-D7nnrL0k.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-_UFbHtZ6.css">
 </head>
 <body>
+  <!-- Ambient background glow -->
+  <div class="ambient-glow"></div>
+
   <div class="portal-container">
     <!-- Top Navigation & Controls -->
     <header class="portal-header">
@@ -57,7 +60,7 @@
         <div class="shortcuts-grid" id="shortcutsGrid"></div>
       </section>
 
-      <!-- Contextual Explorations (Open Tabs & Bookmark Collections) -->
+      <!-- Contextual Section (Open Tabs & Bookmark Collections) -->
       <section class="contextual-section" id="contextualSection">
         <div class="tabs-nav">
           <button class="nav-tab active" data-tab="open-tabs" id="tabOpenTabsBtn">Open Tabs</button>
@@ -100,7 +103,7 @@
           </div>
           <div class="setting-item">
             <label>Floating Command Palette</label>
-            <div class="setting-desc">Press <span class="kbd">Alt+K</span> on any webpage to switch tabs and run browser commands.</div>
+            <div class="setting-desc">Press <span class="kbd">Alt+Q</span> on any webpage to switch tabs and run browser commands.</div>
           </div>
           <div class="setting-item">
             <label>Native Omnibox</label>
@@ -113,10 +116,13 @@
       </div>
     </div>
 
+    <!-- Toast Notification for Actions & Commands -->
+    <div class="portal-toast hidden" id="portalToast"></div>
+
     <!-- Minimal Footer -->
     <footer class="portal-footer">
-      <span class="footer-hint">Press <span class="kbd">Alt+K</span> for Floating Palette on any page</span>
-      <span class="footer-status" id="footerStatus">Portal</span>
+      <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page</span>
+      <span class="footer-status" id="footerStatus">Portal v1.1.0</span>
     </footer>
   </div>
 

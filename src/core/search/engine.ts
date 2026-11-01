@@ -39,28 +39,34 @@ export class SearchEngine {
   }
 
   /**
-   * Executes a full multi-source search.
+   * Executes a full multi-source search across Open Tabs, Bookmarks, History, TopSites, Commands, and Aliases.
    */
-  async search(query: string, preferences: UserPreferences): Promise<SearchResult[]> {
+  async search(
+    query: string,
+    preferences: UserPreferences,
+    options?: { context?: 'overlay' | 'newtab'; currentTabId?: number },
+  ): Promise<SearchResult[]> {
     const q = query.trim();
     const resultsMap = new Map<string, SearchResult>();
 
     // 1. Check custom aliases first
-    const aliases = await storage.getAliases();
-    for (const alias of aliases) {
-      if (alias.keyword.toLowerCase() === q.toLowerCase()) {
-        const norm = this.normalizeUrl(alias.destinationUrl);
-        resultsMap.set(norm, {
-          id: `alias-${alias.keyword}`,
-          type: 'shortcut',
-          title: alias.title || alias.keyword,
-          url: alias.destinationUrl,
-          description: `Custom alias: ${alias.keyword} → ${alias.destinationUrl}`,
-          favicon: getFaviconUrl(alias.destinationUrl),
-          score: 2500,
-          badge: 'ALIAS',
-          pinned: true,
-        });
+    if (q.length > 0) {
+      const aliases = await storage.getAliases();
+      for (const alias of aliases) {
+        if (alias.keyword.toLowerCase() === q.toLowerCase()) {
+          const norm = this.normalizeUrl(alias.destinationUrl);
+          resultsMap.set(norm, {
+            id: `alias-${alias.keyword}`,
+            type: 'shortcut',
+            title: alias.title || alias.keyword,
+            url: alias.destinationUrl,
+            description: `Custom alias: ${alias.keyword} → ${alias.destinationUrl}`,
+            favicon: getFaviconUrl(alias.destinationUrl),
+            score: 3000,
+            badge: 'ALIAS',
+            pinned: true,
+          });
+        }
       }
     }
 
@@ -72,11 +78,11 @@ export class SearchEngine {
         resultsMap.set(norm, {
           id: `direct-url-${norm}`,
           type: 'web',
-          title: `Go to ${q}`,
+          title: `Navigate to ${q}`,
           url: fullUrl,
           description: fullUrl,
           favicon: getFaviconUrl(fullUrl),
-          score: 1800,
+          score: 2200,
           badge: 'VISIT',
         });
       }
@@ -95,13 +101,13 @@ export class SearchEngine {
       }
 
       const bestScore = Math.max(titleMatch.score, descMatch.score * 0.7, keywordScore);
-      if (bestScore > 100 || !q) {
+      if (bestScore > 120 || (!q && (cmd.id === 'restore-closed-tab' || cmd.id === 'close-duplicates'))) {
         resultsMap.set(`cmd-${cmd.id}`, {
           id: `cmd-${cmd.id}`,
           type: 'command',
           title: cmd.title,
           description: cmd.description,
-          score: bestScore > 0 ? bestScore + 100 : 50,
+          score: bestScore > 0 ? bestScore + 150 : 60,
           commandId: cmd.id,
           badge: 'COMMAND',
         });
@@ -114,6 +120,10 @@ export class SearchEngine {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) {
           if (!tab.url || tab.url.startsWith('chrome://newtab')) continue;
+          // In overlay context, omit current tab from tab switcher suggestions
+          if (options?.context === 'overlay' && options?.currentTabId && tab.id === options.currentTabId) {
+            continue;
+          }
 
           const norm = this.normalizeUrl(tab.url);
           const titleMatch = scoreStringMatch(q, tab.title || '');
@@ -121,7 +131,8 @@ export class SearchEngine {
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
           if (bestMatch > 0 || !q) {
-            const score = bestMatch + 250; // Tab switch bonus
+            // Significant Tab switch bonus when matching
+            const score = bestMatch > 0 ? bestMatch + 350 : 200;
             const existing = resultsMap.get(norm);
             if (!existing || existing.score < score) {
               resultsMap.set(norm, {
@@ -153,7 +164,7 @@ export class SearchEngine {
       try {
         const bookmarks = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
           if (!q) {
-            chrome.bookmarks.getRecent(15, resolve);
+            chrome.bookmarks.getRecent(10, resolve);
           } else {
             chrome.bookmarks.search(q, resolve);
           }
@@ -167,7 +178,7 @@ export class SearchEngine {
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
           if (bestMatch > 0 || !q) {
-            const score = bestMatch + 120; // Bookmark bonus
+            const score = bestMatch > 0 ? bestMatch + 160 : 120;
             const existing = resultsMap.get(norm);
             if (!existing) {
               resultsMap.set(norm, {
@@ -213,23 +224,26 @@ export class SearchEngine {
           const urlMatch = scoreStringMatch(q, item.url);
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.7);
 
-          const recency = computeRecencyBonus(item.lastVisitTime);
-          const freq = computeFrequencyBonus(item.visitCount);
-          const totalScore = bestMatch + recency + freq;
+          if (bestMatch > 0 || !q) {
+            const recency = computeRecencyBonus(item.lastVisitTime);
+            const freq = computeFrequencyBonus(item.visitCount);
+            const totalScore = (bestMatch > 0 ? bestMatch + 50 : 50) + recency + freq;
 
-          const existing = resultsMap.get(norm);
-          if (!existing) {
-            resultsMap.set(norm, {
-              id: `hist-${item.id || norm}`,
-              type: 'history',
-              title: item.title || item.url,
-              url: item.url,
-              description: new URL(item.url).hostname,
-              favicon: getFaviconUrl(item.url),
-              score: totalScore,
-              lastVisitTime: item.lastVisitTime,
-              visitCount: item.visitCount,
-            });
+            const existing = resultsMap.get(norm);
+            if (!existing) {
+              resultsMap.set(norm, {
+                id: `hist-${item.id || norm}`,
+                type: 'history',
+                title: item.title || item.url,
+                url: item.url,
+                description: new URL(item.url).hostname,
+                favicon: getFaviconUrl(item.url),
+                score: totalScore,
+                lastVisitTime: item.lastVisitTime,
+                visitCount: item.visitCount,
+                badge: 'HISTORY',
+              });
+            }
           }
         }
       } catch (err) {
@@ -237,7 +251,34 @@ export class SearchEngine {
       }
     }
 
-    // 7. Pinned shortcuts
+    // 7. Top Sites Integration (especially when query is empty)
+    if (!q && this.isExt() && chrome.topSites) {
+      try {
+        const topSites = await new Promise<chrome.topSites.MostVisitedURL[]>((resolve) => {
+          chrome.topSites.get(resolve);
+        });
+        for (const site of topSites.slice(0, 8)) {
+          const norm = this.normalizeUrl(site.url);
+          if (await storage.isDismissed(norm)) continue;
+          if (!resultsMap.has(norm)) {
+            resultsMap.set(norm, {
+              id: `topsite-${norm}`,
+              type: 'topsite',
+              title: site.title || site.url,
+              url: site.url,
+              description: `Top site • ${new URL(site.url).hostname}`,
+              favicon: getFaviconUrl(site.url),
+              score: 180,
+              badge: 'TOP SITE',
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error querying top sites:', err);
+      }
+    }
+
+    // 8. Pinned shortcuts
     const pinned = await storage.getPinnedShortcuts();
     for (const p of pinned) {
       const norm = this.normalizeUrl(p.url);
@@ -249,7 +290,7 @@ export class SearchEngine {
         const existing = resultsMap.get(norm);
         if (existing) {
           existing.pinned = true;
-          existing.score += 200;
+          existing.score += 250;
         } else {
           resultsMap.set(norm, {
             id: `pin-${p.id}`,
@@ -258,7 +299,7 @@ export class SearchEngine {
             url: p.url,
             description: new URL(p.url).hostname,
             favicon: getFaviconUrl(p.url),
-            score: bestMatch + 300,
+            score: bestMatch > 0 ? bestMatch + 350 : 250,
             pinned: true,
             badge: 'PINNED',
           });
@@ -266,7 +307,30 @@ export class SearchEngine {
       }
     }
 
-    // 8. Add Web Search fallback when a query is entered
+    // 9. Intelligent AI History Clusters (for empty query)
+    if (!q) {
+      const intel = await storage.getIntelligence();
+      if (intel && intel.clusters) {
+        for (const cluster of intel.clusters.slice(0, 6)) {
+          const norm = this.normalizeUrl(cluster.primaryUrl);
+          if (await storage.isDismissed(norm)) continue;
+          if (!resultsMap.has(norm)) {
+            resultsMap.set(norm, {
+              id: cluster.id,
+              type: 'ai_cluster',
+              title: cluster.topic,
+              url: cluster.primaryUrl,
+              description: cluster.aiGeneratedReason || `Discovered topic • ${cluster.domain}`,
+              favicon: getFaviconUrl(cluster.primaryUrl),
+              score: 190,
+              badge: '✦ AI',
+            });
+          }
+        }
+      }
+    }
+
+    // 10. Web Search fallback when query is typed
     if (q.length > 0) {
       const searchEngine = preferences.searchEngine || 'google';
       const searchUrl =
@@ -281,8 +345,8 @@ export class SearchEngine {
         type: 'web',
         title: `Search ${searchEngine === 'duckduckgo' ? 'DuckDuckGo' : searchEngine === 'bing' ? 'Bing' : 'Google'} for "${q}"`,
         url: searchUrl,
-        description: `Web Search intent • Enter to search`,
-        score: 50,
+        description: `Web Search • Opens in new tab`,
+        score: 40,
         badge: 'SEARCH',
       });
     }
@@ -290,7 +354,7 @@ export class SearchEngine {
     // Convert map to array and sort by descending score
     const sorted = Array.from(resultsMap.values()).sort((a, b) => b.score - a.score);
 
-    const maxLimit = preferences.maxSuggestions || 8;
+    const maxLimit = preferences.maxSuggestions || 10;
     return sorted.slice(0, maxLimit);
   }
 }

@@ -14,6 +14,7 @@ class PortalNewTabController {
     showRecentTabs: true,
     showIntelligentShortcuts: true,
     reducedMotion: false,
+    density: 'comfortable',
   };
 
   private searchInput!: HTMLInputElement;
@@ -22,6 +23,7 @@ class PortalNewTabController {
   private shortcutsGrid!: HTMLElement;
   private openTabsGrid!: HTMLElement;
   private bookmarksTree!: HTMLElement;
+  private toastEl!: HTMLElement;
 
   private currentSuggestions: SearchResult[] = [];
   private selectedSuggestionIndex = -1;
@@ -31,8 +33,8 @@ class PortalNewTabController {
     this.bindDomElements();
     this.setupIcons();
     this.setupClock();
-    await this.loadPreferences();
     this.setupEventListeners();
+    await this.loadPreferences();
 
     // Fast parallel loads
     this.renderShortcuts();
@@ -48,6 +50,7 @@ class PortalNewTabController {
     this.shortcutsGrid = document.getElementById('shortcutsGrid') as HTMLElement;
     this.openTabsGrid = document.getElementById('openTabsGrid') as HTMLElement;
     this.bookmarksTree = document.getElementById('bookmarksTree') as HTMLElement;
+    this.toastEl = document.getElementById('portalToast') as HTMLElement;
   }
 
   private setupIcons() {
@@ -99,6 +102,15 @@ class PortalNewTabController {
     }
   }
 
+  private showToast(message: string) {
+    if (!this.toastEl) return;
+    this.toastEl.textContent = message;
+    this.toastEl.classList.remove('hidden');
+    setTimeout(() => {
+      this.toastEl.classList.add('hidden');
+    }, 2800);
+  }
+
   private setupEventListeners() {
     // Search input
     this.searchInput.addEventListener('input', () => {
@@ -127,6 +139,7 @@ class PortalNewTabController {
       this.applyTheme(next);
       const themeSelect = document.getElementById('themeSelect') as HTMLSelectElement | null;
       if (themeSelect) themeSelect.value = next;
+      this.showToast(`Theme switched to ${next}`);
     });
 
     // Settings Modal
@@ -152,6 +165,7 @@ class PortalNewTabController {
     searchSelect?.addEventListener('change', async () => {
       const searchEngine = searchSelect.value as any;
       this.prefs = await storage.savePreferences({ searchEngine });
+      this.showToast(`Search engine set to ${searchEngine}`);
     });
 
     // Clear data button
@@ -159,7 +173,8 @@ class PortalNewTabController {
     clearBtn?.addEventListener('click', async () => {
       if (confirm('Clear cached browsing recommendations and AI clusters?')) {
         await storage.clearDerivedData();
-        window.location.reload();
+        this.showToast('Discovery cache cleared');
+        setTimeout(() => window.location.reload(), 500);
       }
     });
 
@@ -174,6 +189,7 @@ class PortalNewTabController {
       tabBookmarksBtn?.classList.remove('active');
       openTabsContent?.classList.remove('hidden');
       bookmarksContent?.classList.add('hidden');
+      this.renderOpenTabs();
     });
 
     tabBookmarksBtn?.addEventListener('click', () => {
@@ -181,6 +197,7 @@ class PortalNewTabController {
       tabOpenTabsBtn?.classList.remove('active');
       bookmarksContent?.classList.remove('hidden');
       openTabsContent?.classList.add('hidden');
+      this.renderBookmarks();
     });
   }
 
@@ -193,7 +210,7 @@ class PortalNewTabController {
       return;
     }
 
-    this.currentSuggestions = await searchEngine.search(query, this.prefs);
+    this.currentSuggestions = await searchEngine.search(query, this.prefs, { context: 'newtab' });
     this.selectedSuggestionIndex = this.currentSuggestions.length > 0 ? 0 : -1;
     this.renderSuggestions();
   }
@@ -247,7 +264,7 @@ class PortalNewTabController {
         li.appendChild(badge);
       }
 
-      li.addEventListener('click', () => this.executeSuggestion(item));
+      li.addEventListener('click', (e) => this.executeSuggestion(item, e));
       li.addEventListener('mouseenter', () => {
         this.selectedSuggestionIndex = index;
         this.updateSelectedSuggestion();
@@ -270,6 +287,8 @@ class PortalNewTabController {
         return Icons.tab;
       case 'bookmark':
         return Icons.bookmark;
+      case 'history':
+        return Icons.history;
       case 'command':
         return Icons.command;
       case 'shortcut':
@@ -300,7 +319,19 @@ class PortalNewTabController {
       return;
     }
 
-    if (this.currentSuggestions.length === 0) return;
+    if (this.currentSuggestions.length === 0) {
+      if (e.key === 'Enter' && this.searchInput.value.trim()) {
+        const q = this.searchInput.value.trim();
+        const searchUrl =
+          this.prefs.searchEngine === 'duckduckgo'
+            ? `https://duckduckgo.com/?q=${encodeURIComponent(q)}`
+            : this.prefs.searchEngine === 'bing'
+              ? `https://www.bing.com/search?q=${encodeURIComponent(q)}`
+              : `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+        window.location.href = searchUrl;
+      }
+      return;
+    }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -320,26 +351,20 @@ class PortalNewTabController {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (this.selectedSuggestionIndex >= 0 && this.currentSuggestions[this.selectedSuggestionIndex]) {
-        this.executeSuggestion(this.currentSuggestions[this.selectedSuggestionIndex]);
-      } else if (this.searchInput.value.trim()) {
-        // Direct web search fallback
-        const q = this.searchInput.value.trim();
-        const searchUrl =
-          this.prefs.searchEngine === 'duckduckgo'
-            ? `https://duckduckgo.com/?q=${encodeURIComponent(q)}`
-            : this.prefs.searchEngine === 'bing'
-              ? `https://www.bing.com/search?q=${encodeURIComponent(q)}`
-              : `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-        window.location.href = searchUrl;
+        this.executeSuggestion(this.currentSuggestions[this.selectedSuggestionIndex], e);
       }
     }
   }
 
-  private async executeSuggestion(item: SearchResult) {
+  private async executeSuggestion(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
     if (item.type === 'command' && item.commandId) {
       const cmd = COMMANDS.find((c) => c.id === item.commandId);
       if (cmd) {
-        await cmd.execute();
+        const res = await cmd.execute();
+        if (res && res.message) {
+          this.showToast(res.message);
+        }
+        this.hideSuggestions();
       }
       return;
     }
@@ -355,7 +380,16 @@ class PortalNewTabController {
     }
 
     if (item.url) {
-      window.location.href = item.url;
+      if (e?.ctrlKey || (e as any)?.metaKey) {
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+          await chrome.tabs.create({ url: item.url, active: false });
+          this.showToast('Opened in background tab');
+        } else {
+          window.open(item.url, '_blank');
+        }
+      } else {
+        window.location.href = item.url;
+      }
     }
   }
 
@@ -420,7 +454,7 @@ class PortalNewTabController {
       if (item.isAiSuggested) {
         const aiPill = document.createElement('span');
         aiPill.className = 'ai-pill';
-        aiPill.innerHTML = '✦ AI';
+        aiPill.textContent = '✦ AI';
         aiPill.title = item.cluster?.aiGeneratedReason || 'Discovered from recent browsing';
         card.appendChild(aiPill);
       }
@@ -437,12 +471,14 @@ class PortalNewTabController {
         e.stopPropagation();
         if (item.isPinned) {
           await storage.unpinShortcut(item.id);
+          this.showToast(`Unpinned ${item.title}`);
         } else {
           await storage.pinShortcut({
             id: item.id,
             title: item.title,
             url: item.url,
           });
+          this.showToast(`Pinned ${item.title} to Quick Access`);
         }
         this.renderShortcuts();
       });
@@ -456,6 +492,7 @@ class PortalNewTabController {
         e.stopPropagation();
         if (item.cluster) {
           await intelligenceManager.dismissCluster(item.cluster);
+          this.showToast(`Dismissed ${item.title}`);
         } else {
           await storage.unpinShortcut(item.id);
         }
@@ -497,8 +534,16 @@ class PortalNewTabController {
       card.appendChild(domain);
 
       // Click to navigate
-      card.addEventListener('click', () => {
-        window.location.href = item.url;
+      card.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          if (typeof chrome !== 'undefined' && chrome.tabs) {
+            chrome.tabs.create({ url: item.url, active: false });
+          } else {
+            window.open(item.url, '_blank');
+          }
+        } else {
+          window.location.href = item.url;
+        }
       });
       card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -515,7 +560,8 @@ class PortalNewTabController {
   private async renderOpenTabs() {
     this.openTabsGrid.innerHTML = '';
     if (typeof chrome === 'undefined' || !chrome.tabs) {
-      this.openTabsGrid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Tabs available in Chrome extension mode</div>';
+      this.openTabsGrid.innerHTML =
+        '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Tabs available in Chrome extension mode</div>';
       return;
     }
 
@@ -524,7 +570,8 @@ class PortalNewTabController {
       const eligibleTabs = tabs.filter((t) => t.url && !t.url.startsWith('chrome://newtab'));
 
       if (eligibleTabs.length === 0) {
-        this.openTabsGrid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No other open tabs</div>';
+        this.openTabsGrid.innerHTML =
+          '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No other open tabs</div>';
         return;
       }
 
@@ -560,6 +607,7 @@ class PortalNewTabController {
           if (tab.id) {
             await chrome.tabs.remove(tab.id);
             row.remove();
+            this.showToast('Tab closed');
           }
         });
         row.appendChild(closeBtn);
@@ -583,29 +631,46 @@ class PortalNewTabController {
   private async renderBookmarks() {
     this.bookmarksTree.innerHTML = '';
     if (typeof chrome === 'undefined' || !chrome.bookmarks) {
-      this.bookmarksTree.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Bookmarks available in Chrome extension mode</div>';
+      this.bookmarksTree.innerHTML =
+        '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Bookmarks available in Chrome extension mode</div>';
       return;
     }
 
     try {
-      const recent = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
-        chrome.bookmarks.getRecent(12, resolve);
+      // Fetch full bookmark tree to support folder navigation
+      const tree = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
+        chrome.bookmarks.getTree(resolve);
       });
 
-      if (recent.length === 0) {
-        this.bookmarksTree.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No saved bookmarks yet</div>';
+      const rootNodes = tree[0]?.children || [];
+      if (rootNodes.length === 0) {
+        this.bookmarksTree.innerHTML =
+          '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No saved bookmarks found</div>';
         return;
       }
 
-      recent.forEach((bm) => {
-        if (!bm.url) return;
+      this.renderBookmarkNodes(rootNodes, this.bookmarksTree, 0);
+      if (this.bookmarksTree.children.length === 0) {
+        this.bookmarksTree.innerHTML =
+          '<div style="color:var(--text-muted);font-size:13px;padding:12px;text-align:center;">No saved bookmarks found</div>';
+      }
+    } catch (err) {
+      console.warn('Error loading bookmarks tree:', err);
+    }
+  }
+
+  private renderBookmarkNodes(nodes: chrome.bookmarks.BookmarkTreeNode[], container: HTMLElement, depth: number) {
+    nodes.forEach((node) => {
+      if (node.url) {
+        // Bookmark item
         const a = document.createElement('a');
         a.className = 'bookmark-item';
-        a.href = bm.url;
+        a.href = node.url;
+        a.style.paddingLeft = `${depth * 14 + 10}px`;
 
         const iconSlot = document.createElement('div');
         iconSlot.className = 'tab-icon';
-        const favUrl = getFaviconUrl(bm.url);
+        const favUrl = getFaviconUrl(node.url);
         if (favUrl) {
           const img = document.createElement('img');
           img.src = favUrl;
@@ -623,14 +688,57 @@ class PortalNewTabController {
         title.style.overflow = 'hidden';
         title.style.textOverflow = 'ellipsis';
         title.style.whiteSpace = 'nowrap';
-        title.textContent = bm.title || bm.url;
+        title.textContent = node.title || node.url;
         a.appendChild(title);
 
-        this.bookmarksTree.appendChild(a);
-      });
-    } catch (err) {
-      console.warn('Error loading bookmarks:', err);
-    }
+        a.addEventListener('click', (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            chrome.tabs.create({ url: node.url, active: false });
+          } else {
+            window.location.href = node.url!;
+          }
+        });
+
+        container.appendChild(a);
+      } else if (node.children && node.children.length > 0) {
+        // Bookmark folder
+        const folderDiv = document.createElement('div');
+        folderDiv.className = 'bookmark-folder-row';
+        folderDiv.style.paddingLeft = `${depth * 14 + 8}px`;
+        folderDiv.style.display = 'flex';
+        folderDiv.style.alignItems = 'center';
+        folderDiv.style.gap = '8px';
+        folderDiv.style.paddingTop = '6px';
+        folderDiv.style.paddingBottom = '6px';
+        folderDiv.style.cursor = 'pointer';
+        folderDiv.style.color = 'var(--text-secondary)';
+        folderDiv.style.fontSize = '12px';
+        folderDiv.style.fontWeight = '600';
+
+        const folderIcon = document.createElement('div');
+        folderIcon.className = 'tab-icon';
+        folderIcon.innerHTML = Icons.folder;
+        folderDiv.appendChild(folderIcon);
+
+        const folderName = document.createElement('span');
+        folderName.textContent = node.title || 'Folder';
+        folderDiv.appendChild(folderName);
+
+        const childContainer = document.createElement('div');
+        childContainer.className = 'folder-children';
+        childContainer.style.display = depth === 0 ? 'block' : 'none'; // Default open top-level
+
+        folderDiv.addEventListener('click', () => {
+          const isHidden = childContainer.style.display === 'none';
+          childContainer.style.display = isHidden ? 'block' : 'none';
+        });
+
+        container.appendChild(folderDiv);
+        container.appendChild(childContainer);
+
+        this.renderBookmarkNodes(node.children, childContainer, depth + 1);
+      }
+    });
   }
 
   // --- Intelligence Status Badge ---
@@ -642,14 +750,18 @@ class PortalNewTabController {
 
     if (status.available) {
       if (labelEl) labelEl.textContent = 'Gemini Nano Active';
-      if (badgeEl) badgeEl.title = 'Chrome on-device Gemini Nano is active and refining suggestions.';
+      if (badgeEl) badgeEl.title = 'Chrome on-device Gemini Nano is active and refining suggestions locally.';
     } else {
       if (labelEl) labelEl.textContent = 'Intelligent Discovery';
-      if (badgeEl) badgeEl.title = 'High-frequency deterministic clustering active. 100% on-device & private.';
+      if (badgeEl) badgeEl.title = 'Frequency-recency clustering active. 100% on-device & private.';
     }
   }
 }
 
 // Instantiate and initialize
 const portalApp = new PortalNewTabController();
-document.addEventListener('DOMContentLoaded', () => portalApp.init());
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => portalApp.init());
+} else {
+  portalApp.init();
+}

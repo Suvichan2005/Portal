@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Portal",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Intelligent, beautiful, ultra-lightweight Chrome homepage and browser launcher",
   "chrome_url_overrides": {
     "newtab": "src/newtab/index.html"
@@ -17,7 +17,8 @@
     "storage",
     "topSites",
     "favicon",
-    "scripting"
+    "scripting",
+    "sessions"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -28,15 +29,15 @@
   "commands": {
     "toggle-launcher": {
       "suggested_key": {
-        "default": "Alt+K",
-        "mac": "Alt+K",
-        "windows": "Alt+K"
+        "default": "Alt+Q",
+        "mac": "Alt+Q",
+        "windows": "Alt+Q"
       },
       "description": "Toggle Portal floating command palette"
     }
   },
   "action": {
-    "default_title": "Portal Launcher",
+    "default_title": "Portal Launcher (Alt+Q)",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",

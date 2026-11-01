@@ -9,23 +9,28 @@ export const COMMANDS: BrowserCommand[] = [
     category: 'tabs',
     keywords: ['close', 'duplicate', 'dedupe', 'clean', 'tabs', 'memory'],
     execute: async () => {
-      if (typeof chrome === 'undefined' || !chrome.tabs) return;
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+        return { success: false, message: 'Tabs API not available' };
+      }
       const tabs = await chrome.tabs.query({});
       const seenUrls = new Set<string>();
       const toClose: number[] = [];
 
       for (const tab of tabs) {
-        if (!tab.url || !tab.id) continue;
-        if (seenUrls.has(tab.url)) {
+        if (!tab.url || !tab.id || tab.url.startsWith('chrome://newtab')) continue;
+        const norm = tab.url.toLowerCase().split('#')[0].replace(/\/$/, '');
+        if (seenUrls.has(norm)) {
           toClose.push(tab.id);
         } else {
-          seenUrls.add(tab.url);
+          seenUrls.add(norm);
         }
       }
 
       if (toClose.length > 0) {
         await chrome.tabs.remove(toClose);
+        return { success: true, message: `Closed ${toClose.length} duplicate tab${toClose.length > 1 ? 's' : ''}` };
       }
+      return { success: true, message: 'No duplicate tabs found' };
     },
   },
   {
@@ -35,16 +40,57 @@ export const COMMANDS: BrowserCommand[] = [
     category: 'tabs',
     keywords: ['restore', 'reopen', 'undo', 'closed', 'tab'],
     execute: async () => {
-      if (typeof chrome === 'undefined' || !chrome.sessions) return;
-      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 1 });
-      if (sessions.length > 0) {
-        const session = sessions[0];
-        if (session.tab?.sessionId) {
-          await chrome.sessions.restore(session.tab.sessionId);
-        } else if (session.window?.sessionId) {
-          await chrome.sessions.restore(session.window.sessionId);
-        }
+      if (typeof chrome === 'undefined' || !chrome.sessions) {
+        return { success: false, message: 'Sessions API not available' };
       }
+      try {
+        const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 1 });
+        if (sessions.length > 0) {
+          const session = sessions[0];
+          if (session.tab?.sessionId) {
+            await chrome.sessions.restore(session.tab.sessionId);
+            return { success: true, message: 'Restored closed tab' };
+          } else if (session.window?.sessionId) {
+            await chrome.sessions.restore(session.window.sessionId);
+            return { success: true, message: 'Restored closed window' };
+          }
+        }
+        return { success: false, message: 'No recently closed tabs to restore' };
+      } catch (err: any) {
+        return { success: false, message: `Failed to restore tab: ${err.message}` };
+      }
+    },
+  },
+  {
+    id: 'duplicate-current-tab',
+    title: 'Duplicate Current Tab',
+    description: 'Create an exact duplicate of the active tab',
+    category: 'tabs',
+    keywords: ['duplicate', 'clone', 'tab', 'copy'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false };
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        await chrome.tabs.duplicate(tab.id);
+        return { success: true, message: 'Tab duplicated' };
+      }
+      return { success: false };
+    },
+  },
+  {
+    id: 'pin-current-tab',
+    title: 'Toggle Pin on Tab',
+    description: 'Pin or unpin the currently active tab',
+    category: 'tabs',
+    keywords: ['pin', 'unpin', 'tab', 'dock'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false };
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        await chrome.tabs.update(tab.id, { pinned: !tab.pinned });
+        return { success: true, message: tab.pinned ? 'Tab unpinned' : 'Tab pinned' };
+      }
+      return { success: false };
     },
   },
   {
@@ -54,8 +100,9 @@ export const COMMANDS: BrowserCommand[] = [
     category: 'navigation',
     keywords: ['incognito', 'private', 'secret', 'window', 'new'],
     execute: async () => {
-      if (typeof chrome === 'undefined' || !chrome.windows) return;
+      if (typeof chrome === 'undefined' || !chrome.windows) return { success: false };
       await chrome.windows.create({ incognito: true });
+      return { success: true, message: 'Incognito window opened' };
     },
   },
   {
@@ -70,6 +117,7 @@ export const COMMANDS: BrowserCommand[] = [
       } else {
         window.open('chrome://bookmarks', '_blank');
       }
+      return { success: true };
     },
   },
   {
@@ -84,6 +132,7 @@ export const COMMANDS: BrowserCommand[] = [
       } else {
         window.open('chrome://history', '_blank');
       }
+      return { success: true };
     },
   },
   {
@@ -98,6 +147,7 @@ export const COMMANDS: BrowserCommand[] = [
       } else {
         window.open('chrome://downloads', '_blank');
       }
+      return { success: true };
     },
   },
   {
@@ -112,6 +162,7 @@ export const COMMANDS: BrowserCommand[] = [
       } else {
         window.open('chrome://extensions', '_blank');
       }
+      return { success: true };
     },
   },
   {
@@ -126,6 +177,7 @@ export const COMMANDS: BrowserCommand[] = [
       } else {
         window.open('chrome://settings', '_blank');
       }
+      return { success: true };
     },
   },
   {
@@ -138,7 +190,10 @@ export const COMMANDS: BrowserCommand[] = [
       const prefs = await storage.getPreferences();
       const nextTheme = prefs.theme === 'dark' ? 'light' : prefs.theme === 'light' ? 'system' : 'dark';
       await storage.savePreferences({ theme: nextTheme });
-      document.documentElement.setAttribute('data-theme', nextTheme);
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-theme', nextTheme);
+      }
+      return { success: true, message: `Theme switched to ${nextTheme}` };
     },
   },
   {
@@ -149,7 +204,7 @@ export const COMMANDS: BrowserCommand[] = [
     keywords: ['clear', 'cache', 'ai', 'recommendations', 'reset', 'privacy'],
     execute: async () => {
       await storage.clearDerivedData();
-      window.location.reload();
+      return { success: true, message: 'AI discovery cache cleared' };
     },
   },
 ];
