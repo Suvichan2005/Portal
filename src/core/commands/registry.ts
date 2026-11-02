@@ -1,6 +1,9 @@
 import { BrowserCommand } from '../types';
 import { storage } from '../storage';
 
+// Track tabs that Portal explicitly muted so we never accidentally unmute tabs muted deliberately by the user outside Portal
+const portalMutedTabIds = new Set<number>();
+
 export const COMMANDS: BrowserCommand[] = [
   {
     id: 'close-duplicates',
@@ -424,17 +427,32 @@ export const COMMANDS: BrowserCommand[] = [
       if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false, message: 'Tabs API not available' };
       const audibleTabs = await chrome.tabs.query({ audible: true });
       if (audibleTabs.length === 0) {
-        const mutedTabs = await chrome.tabs.query({ muted: true });
-        if (mutedTabs.length > 0) {
-          for (const tab of mutedTabs) {
-            if (tab.id) await chrome.tabs.update(tab.id, { muted: false });
+        // Only unmute tabs that were previously muted by Portal; NEVER touch tabs user deliberately muted outside Portal
+        if (portalMutedTabIds.size > 0) {
+          let unmutedCount = 0;
+          for (const tabId of Array.from(portalMutedTabIds)) {
+            try {
+              const tab = await chrome.tabs.get(tabId);
+              if (tab && tab.mutedInfo?.muted) {
+                await chrome.tabs.update(tabId, { muted: false });
+                unmutedCount++;
+              }
+            } catch {
+              // Tab may have been closed
+            }
           }
-          return { success: true, message: `Unmuted ${mutedTabs.length} tab(s)` };
+          portalMutedTabIds.clear();
+          if (unmutedCount > 0) {
+            return { success: true, message: `Unmuted ${unmutedCount} tab(s)` };
+          }
         }
         return { success: false, message: 'No tabs playing audio to mute' };
       }
       for (const tab of audibleTabs) {
-        if (tab.id) await chrome.tabs.update(tab.id, { muted: true });
+        if (tab.id) {
+          await chrome.tabs.update(tab.id, { muted: true });
+          portalMutedTabIds.add(tab.id);
+        }
       }
       return { success: true, message: `Muted ${audibleTabs.length} audio tab(s)` };
     },
@@ -477,9 +495,20 @@ export const COMMANDS: BrowserCommand[] = [
         return { success: false, message: 'No saved sessions found. Use "Save Current Window as Session Workspace" first.' };
       }
       const latest = sessions[0];
-      const urls = latest.tabs.map((t) => t.url);
-      await chrome.windows.create({ url: urls });
-      return { success: true, message: `Restored session "${latest.name}" (${urls.length} tabs)` };
+      const validUrls = (latest.tabs || [])
+        .map((t) => t.url)
+        .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
+
+      if (validUrls.length === 0) {
+        return { success: false, message: `Session "${latest.name}" contains no valid URLs to restore.` };
+      }
+
+      try {
+        await chrome.windows.create({ url: validUrls });
+        return { success: true, message: `Restored session "${latest.name}" (${validUrls.length} tabs)` };
+      } catch (err: any) {
+        return { success: false, message: `Failed to restore session window: ${err?.message || 'Unknown error'}` };
+      }
     },
   },
 ];

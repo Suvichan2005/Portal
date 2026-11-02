@@ -365,16 +365,44 @@ class StorageService {
     }
   }
 
+  async getSessionById(id: string): Promise<SavedSession | null> {
+    const sessions = await this.getSavedSessions();
+    return sessions.find((s) => s.id === id) || null;
+  }
+
   async saveSession(name: string, tabs: { title: string; url: string; favicon?: string }[]): Promise<SavedSession> {
     const existing = await this.getSavedSessions();
+
+    // 1. Sanitize and validate tabs: must be valid http, https, or extension URLs
+    const seenUrls = new Set<string>();
+    const validTabs: { title: string; url: string; favicon?: string }[] = [];
+
+    for (const tab of tabs) {
+      if (!tab.url) continue;
+      const trimmed = tab.url.trim();
+      if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('chrome-extension://')) {
+        continue;
+      }
+      const norm = trimmed.toLowerCase().split('#')[0].replace(/\/$/, '');
+      if (seenUrls.has(norm)) continue;
+      seenUrls.add(norm);
+      validTabs.push({
+        title: tab.title?.trim() || trimmed,
+        url: trimmed,
+        favicon: tab.favicon,
+      });
+    }
+
     const session: SavedSession = {
-      id: `session-${Date.now()}`,
+      id: `session-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: name.trim() || `Session ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
       savedAt: Date.now(),
-      tabCount: tabs.length,
-      tabs,
+      tabCount: validTabs.length,
+      tabs: validTabs,
     };
-    const updated = [session, ...existing].slice(0, 20);
+
+    // Capacity up to 100 sessions to avoid premature silent dropping
+    const updated = [session, ...existing].slice(0, 100);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
@@ -385,9 +413,27 @@ class StorageService {
     return session;
   }
 
-  async deleteSavedSession(id: string): Promise<void> {
+  async renameSavedSession(id: string, newName: string): Promise<SavedSession | null> {
+    const trimmed = newName.trim();
+    if (!trimmed) return null;
+    const existing = await this.getSavedSessions();
+    const target = existing.find((s) => s.id === id);
+    if (!target) return null;
+    target.name = trimmed;
+    if (this.isExtensionEnvironment()) {
+      await new Promise<void>((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: existing }, () => resolve());
+      });
+    } else {
+      this.setRaw(STORAGE_KEYS.SESSIONS, JSON.stringify(existing));
+    }
+    return target;
+  }
+
+  async deleteSavedSession(id: string): Promise<boolean> {
     const existing = await this.getSavedSessions();
     const updated = existing.filter((s) => s.id !== id);
+    if (updated.length === existing.length) return false;
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
@@ -395,6 +441,7 @@ class StorageService {
     } else {
       this.setRaw(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
     }
+    return true;
   }
 }
 

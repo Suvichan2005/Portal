@@ -39,6 +39,12 @@ Portal v1.3.1 directly addresses and resolves the source-integrity and simulatio
    - Replaced plain string concatenation with strict hex/alphanumeric sanitization (`BriefingService.buildGmailThreadUrl`) enforcing canonical `https://mail.google.com/mail/u/0/#inbox/<sanitizedId>` links.
 10. **Resilient In-Memory Storage Fallback**:
     - Enhanced `StorageService` with in-memory fallback mechanisms to ensure graceful execution across Node.js test runners, background service workers, and page contexts without runtime DOM errors.
+11. **Saved Session Hardening & Capacity**:
+    - `saveSession` validates and sanitizes URLs (rejecting `javascript:` and invalid schemes), deduplicates tabs within sessions, and expands capacity to 100 sessions without silent 20-item truncation.
+    - Added session renaming (`renameSavedSession`) and deletion (`deleteSavedSession`).
+12. **Safe Audio Controls & Audible Tab Isolation**:
+    - `mute-all-audio-tabs` tracks `portalMutedTabIds` to ensure unmuting ONLY restores tabs that were muted by Portal, never unmuting tabs the user deliberately muted outside Portal.
+    - Search engine `@audio` prefix strictly filters for `audible: true` tabs with score bonuses and `AUDIO 🔊` badge.
 
 ---
 
@@ -46,9 +52,9 @@ Portal v1.3.1 directly addresses and resolves the source-integrity and simulatio
 
 | Verification Area | Result | Notes |
 | :--- | :--- | :--- |
-| **Unit Test Suite (`tests/unit`)** | **12 of 12 PASSED** | Verified seed purging, timestamp freezing, markdown import, URL sanitization, task rejection |
+| **Unit Test Suite (`tests/unit`)** | **19 of 19 PASSED** | Verified seed purging, timestamp freezing, markdown import, URL sanitization, task rejection, saved sessions capacity, and audio muting |
 | **Playwright E2E Suite (`tests/e2e`)** | **22 of 22 PASSED** | Ran against real unpacked Chrome MV3 extension in Chromium |
-| **Total Test Verification** | **34 of 34 PASSED** | Zero skipped, zero failures (1.2m full run) |
+| **Total Test Verification** | **41 of 41 PASSED** | Zero skipped, zero failures (1.2m full run) |
 | **TypeScript Typecheck** | **0 errors** | Strict mode enforced across core, overlay, newtab, service worker |
 | **Network Zero-Overhead Test** | **PASSED (0 reqs)** | Verified cold New Tab open produces 0 non-extension requests |
 | **Bundle Footprint** | **<96 KB total** | Service worker (6.06 KB), overlay (13.63 KB), newtab (33.95 KB) |

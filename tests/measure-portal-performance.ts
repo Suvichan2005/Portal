@@ -15,8 +15,11 @@ async function benchmarkPortal() {
     ],
   });
 
-  const sw = (await context.serviceWorkers())[0];
-  const extId = sw ? sw.url().split('/')[2] : '';
+  let sw = (await context.serviceWorkers())[0];
+  if (!sw) {
+    sw = await context.waitForEvent('serviceworker');
+  }
+  const extId = sw.url().split('/')[2];
   const portalUrl = `chrome-extension://${extId}/src/newtab/index.html`;
 
   const page = await context.newPage();

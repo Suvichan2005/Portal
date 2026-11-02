@@ -53,5 +53,7 @@
 | **40. Storage Migration & Synthetic Seed Purge** | `PASSED-UNIT` | Verified in unit tests 1-4: purges synthetic seeds (`prio-1`, `comm-1`, `mail-1`, `job-101`) while preserving user items |
 | **41. Source Timestamp Integrity on Refresh** | `PASSED-UNIT` | Verified in unit test 3: `refreshAll()` never advances source timestamps when no live source is connected |
 | **42. Gmail Canonical URL Sanitization** | `PASSED-UNIT` | Verified in unit test 5: rejects script injection and non-hex thread IDs, producing canonical Google Mail links |
-| **43. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. |
-| **44. Local Gmail Companion Authorization** | `OWNER-ACTION-NEEDED` | Production email highlights require owner OAuth authorization through Flowmate/OpenClaw local companion. |
+| **43. Saved Session Sanitization, Renaming & 100-Capacity** | `PASSED-UNIT` | Verified in sessions unit tests 1-5: sanitizes URLs, deduplicates tabs, supports renaming/deletion, and handles 100 sessions without silent truncation |
+| **44. Safe Audio Muting & Preserved User Mute State** | `PASSED-UNIT` | Verified in audio unit tests 6-7: strictly filters audible tabs, and unmuting ONLY restores portal-muted tabs |
+| **45. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. |
+| **46. Local Gmail Companion Authorization** | `OWNER-ACTION-NEEDED` | Production email highlights require owner OAuth authorization through Flowmate/OpenClaw local companion. |

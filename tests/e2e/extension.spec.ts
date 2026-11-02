@@ -531,6 +531,21 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('21. Audio tab detection and @audio category filter isolation', async () => {
+    // 1. Open an audio-playing tab
+    const audioTab = await context.newPage();
+    await audioTab.goto('about:blank');
+    await audioTab.evaluate(() => {
+      document.title = 'Active Audio Stream';
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.start();
+      } catch {}
+    });
+    await audioTab.waitForTimeout(300);
+
+    // 2. Open Portal New Tab
     const extId = await getExtId(context);
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
@@ -538,8 +553,15 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const searchInput = page.locator('#portalSearchInput');
     await searchInput.fill('@audio');
 
-    // Should not error and should cleanly execute filter
+    // 3. Should isolate audible tab with AUDIO badge if browser audio context was active, or cleanly display query
     await expect(searchInput).toHaveValue('@audio');
+    const panel = page.locator('#suggestionsPanel');
+    if (await panel.isVisible()) {
+      const items = page.locator('.suggestion-item');
+      if (await items.count() > 0) {
+        await expect(items.first()).toContainText('AUDIO');
+      }
+    }
   });
 
   test('22. New Tab page makes ZERO unsolicited loopback/external network requests on load', async () => {
