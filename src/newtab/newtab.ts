@@ -16,6 +16,8 @@ import { COMMANDS } from '../core/commands/registry';
 import { briefingService } from '../core/intelligence/briefing-service';
 import { openClawBridge } from '../core/bridge/openclaw-bridge';
 import { runStorageMigration } from '../core/migration';
+import { resolveSynchronousIntent } from '../core/search/grammar';
+import { cleanPastedInput } from '../core/search/url-utils';
 
 class PortalNewTabController {
   private prefs: UserPreferences = {
@@ -190,12 +192,28 @@ class PortalNewTabController {
   private async loadPreferences() {
     this.prefs = await storage.getPreferences();
     this.applyTheme(this.prefs.theme);
+    this.applyAccent(this.prefs.accentColor || 'violet');
+    this.applyDensity(this.prefs.density || 'comfortable');
 
     const themeSelect = document.getElementById('themeSelect') as HTMLSelectElement | null;
     if (themeSelect) themeSelect.value = this.prefs.theme;
 
+    const accentSelect = document.getElementById('accentSelect') as HTMLSelectElement | null;
+    if (accentSelect) accentSelect.value = this.prefs.accentColor || 'violet';
+
+    const densitySelect = document.getElementById('densitySelect') as HTMLSelectElement | null;
+    if (densitySelect) densitySelect.value = this.prefs.density || 'comfortable';
+
     const searchSelect = document.getElementById('searchEngineSelect') as HTMLSelectElement | null;
     if (searchSelect) searchSelect.value = this.prefs.searchEngine;
+
+    const toggleContextual = document.getElementById('toggleContextualSection') as HTMLInputElement | null;
+    if (toggleContextual) toggleContextual.checked = this.prefs.showContextualSection !== false;
+
+    const contextualSection = document.getElementById('contextualSection');
+    if (contextualSection && this.prefs.showContextualSection === false) {
+      contextualSection.classList.add('hidden');
+    }
   }
 
   private applyTheme(theme: string) {
@@ -208,6 +226,14 @@ class PortalNewTabController {
     if (themeBtn) {
       themeBtn.innerHTML = theme === 'light' ? Icons.sun : Icons.moon;
     }
+  }
+
+  private applyAccent(accent: string) {
+    document.documentElement.setAttribute('data-accent', accent);
+  }
+
+  private applyDensity(density: string) {
+    document.documentElement.setAttribute('data-density', density);
   }
 
   private showToast(message: string) {
@@ -248,12 +274,38 @@ class PortalNewTabController {
   }
 
   private setupEventListeners() {
+    // Service Worker message listener (e.g. Alt+Q on new tab focuses search)
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type === 'PORTAL_FOCUS_SEARCH') {
+          this.searchInput?.focus();
+          this.searchInput?.select();
+        }
+      });
+    }
+
     // Only register window focus check if user explicitly opted in to clipboard auto-detection
     if (this.prefs.autoDetectClipboardUrl) {
       window.addEventListener('focus', () => {
         this.checkClipboardForUrl().catch(() => {});
       });
     }
+
+    // '/' key anywhere focuses search (when not in an input/textarea)
+    document.addEventListener('keydown', (e) => {
+      if (
+        e.key === '/' &&
+        document.activeElement !== this.searchInput &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '') &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        this.searchInput?.focus();
+        this.searchInput?.select();
+      }
+    });
 
     // Zen Mode toggle button & keyboard shortcut (Z)
     const zenBtn = document.getElementById('zenToggleBtn');
@@ -345,25 +397,137 @@ class PortalNewTabController {
       }
     });
 
-    // Tab switcher between Open Tabs and Bookmarks
+    const accentSelect = document.getElementById('accentSelect') as HTMLSelectElement | null;
+    accentSelect?.addEventListener('change', async () => {
+      const accentColor = accentSelect.value as any;
+      this.prefs = await storage.savePreferences({ accentColor });
+      this.applyAccent(accentColor);
+      this.showToast(`Accent color set to ${accentColor}`);
+    });
+
+    const densitySelect = document.getElementById('densitySelect') as HTMLSelectElement | null;
+    densitySelect?.addEventListener('change', async () => {
+      const density = densitySelect.value as any;
+      this.prefs = await storage.savePreferences({ density });
+      this.applyDensity(density);
+      this.showToast(`Layout density set to ${density}`);
+    });
+
+    const toggleContextualSection = document.getElementById('toggleContextualSection') as HTMLInputElement | null;
+    toggleContextualSection?.addEventListener('change', async () => {
+      const showContextualSection = toggleContextualSection.checked;
+      this.prefs = await storage.savePreferences({ showContextualSection });
+      const sec = document.getElementById('contextualSection');
+      if (sec) sec.classList.toggle('hidden', !showContextualSection);
+    });
+
+    const checkForUpdatesBtn = document.getElementById('checkForUpdatesBtn');
+    checkForUpdatesBtn?.addEventListener('click', async () => {
+      this.showToast('Checking for build updates...');
+      try {
+        const res = await fetch(chrome.runtime.getURL('build-metadata.json'));
+        if (res.ok) {
+          const meta = await res.json();
+          this.showToast(`Portal v${meta.version} (${meta.commit ? meta.commit.substring(0, 7) : 'latest'})`);
+        } else {
+          this.showToast('Portal v1.4.0 is running current release');
+        }
+      } catch {
+        this.showToast('Portal v1.4.0 (Local release)');
+      }
+    });
+
+    // Shortcut Modal listeners
+    const addShortcutBtn = document.getElementById('addShortcutBtn');
+    addShortcutBtn?.addEventListener('click', () => {
+      this.openEditShortcutModal();
+    });
+
+    const closeEditShortcutModalBtn = document.getElementById('closeEditShortcutModalBtn');
+    const editShortcutModal = document.getElementById('editShortcutModal');
+    closeEditShortcutModalBtn?.addEventListener('click', () => {
+      editShortcutModal?.classList.add('hidden');
+    });
+    editShortcutModal?.addEventListener('click', (e) => {
+      if (e.target === editShortcutModal) editShortcutModal.classList.add('hidden');
+    });
+
+    const saveShortcutBtn = document.getElementById('saveShortcutBtn');
+    saveShortcutBtn?.addEventListener('click', async () => {
+      const idInput = document.getElementById('shortcutIdInput') as HTMLInputElement | null;
+      const titleInput = document.getElementById('shortcutTitleInput') as HTMLInputElement | null;
+      const urlInput = document.getElementById('shortcutUrlInput') as HTMLInputElement | null;
+
+      const title = titleInput?.value.trim() || '';
+      let url = urlInput?.value.trim() || '';
+      if (!url) {
+        this.showToast('Please provide a URL');
+        return;
+      }
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('chrome://')) {
+        url = `https://${url}`;
+      }
+
+      const id = idInput?.value;
+      if (id) {
+        await storage.updateShortcut(id, { title: title || url, customTitle: title, url });
+        this.showToast('Shortcut updated');
+      } else {
+        await storage.pinShortcut({ title: title || url, customTitle: title, url });
+        this.showToast('Shortcut pinned');
+      }
+
+      editShortcutModal?.classList.add('hidden');
+      this.renderShortcuts();
+    });
+
+    const deleteShortcutBtn = document.getElementById('deleteShortcutBtn');
+    deleteShortcutBtn?.addEventListener('click', async () => {
+      const idInput = document.getElementById('shortcutIdInput') as HTMLInputElement | null;
+      const id = idInput?.value;
+      if (id) {
+        await storage.unpinShortcut(id);
+        this.showToast('Shortcut removed');
+        editShortcutModal?.classList.add('hidden');
+        this.renderShortcuts();
+      }
+    });
+
+    // Tab switcher between Open Tabs, Recently Closed, and Bookmarks
     const tabOpenTabsBtn = document.getElementById('tabOpenTabsBtn');
+    const tabRecentlyClosedBtn = document.getElementById('tabRecentlyClosedBtn');
     const tabBookmarksBtn = document.getElementById('tabBookmarksBtn');
     const openTabsContent = document.getElementById('openTabsContent');
+    const recentlyClosedContent = document.getElementById('recentlyClosedContent');
     const bookmarksContent = document.getElementById('bookmarksContent');
 
     tabOpenTabsBtn?.addEventListener('click', () => {
       tabOpenTabsBtn.classList.add('active');
+      tabRecentlyClosedBtn?.classList.remove('active');
       tabBookmarksBtn?.classList.remove('active');
       openTabsContent?.classList.remove('hidden');
+      recentlyClosedContent?.classList.add('hidden');
       bookmarksContent?.classList.add('hidden');
       this.renderOpenTabs();
+    });
+
+    tabRecentlyClosedBtn?.addEventListener('click', () => {
+      tabRecentlyClosedBtn.classList.add('active');
+      tabOpenTabsBtn?.classList.remove('active');
+      tabBookmarksBtn?.classList.remove('active');
+      recentlyClosedContent?.classList.remove('hidden');
+      openTabsContent?.classList.add('hidden');
+      bookmarksContent?.classList.add('hidden');
+      this.renderRecentlyClosed();
     });
 
     tabBookmarksBtn?.addEventListener('click', () => {
       tabBookmarksBtn.classList.add('active');
       tabOpenTabsBtn?.classList.remove('active');
+      tabRecentlyClosedBtn?.classList.remove('active');
       bookmarksContent?.classList.remove('hidden');
       openTabsContent?.classList.add('hidden');
+      recentlyClosedContent?.classList.add('hidden');
       this.renderBookmarks();
     });
 
@@ -611,32 +775,22 @@ class PortalNewTabController {
       return;
     }
 
-    if (this.currentSuggestions.length === 0) {
-      if (e.key === 'Enter' && this.searchInput.value.trim()) {
-        const q = this.searchInput.value.trim();
-        const searchUrl =
-          this.prefs.searchEngine === 'duckduckgo'
-            ? `https://duckduckgo.com/?q=${encodeURIComponent(q)}`
-            : this.prefs.searchEngine === 'bing'
-              ? `https://www.bing.com/search?q=${encodeURIComponent(q)}`
-              : `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-        window.location.href = searchUrl;
-      }
-      return;
-    }
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      this.selectedSuggestionIndex = (this.selectedSuggestionIndex + 1) % this.currentSuggestions.length;
-      this.updateSelectedSuggestion();
+      if (this.currentSuggestions.length > 0) {
+        this.selectedSuggestionIndex = (this.selectedSuggestionIndex + 1) % this.currentSuggestions.length;
+        this.updateSelectedSuggestion();
+      }
       return;
     }
 
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      this.selectedSuggestionIndex =
-        (this.selectedSuggestionIndex - 1 + this.currentSuggestions.length) % this.currentSuggestions.length;
-      this.updateSelectedSuggestion();
+      if (this.currentSuggestions.length > 0) {
+        this.selectedSuggestionIndex =
+          (this.selectedSuggestionIndex - 1 + this.currentSuggestions.length) % this.currentSuggestions.length;
+        this.updateSelectedSuggestion();
+      }
       return;
     }
 
@@ -644,13 +798,44 @@ class PortalNewTabController {
       e.preventDefault();
       if (this.selectedSuggestionIndex >= 0 && this.currentSuggestions[this.selectedSuggestionIndex]) {
         this.executeSuggestion(this.currentSuggestions[this.selectedSuggestionIndex], e);
+        return;
       }
+
+      // Enter pressed before suggestions loaded or suggestions empty: resolve synchronous intent
+      const raw = this.searchInput.value.trim();
+      if (!raw) return;
+
+      const intent = resolveSynchronousIntent(raw, this.prefs.searchEngine);
+      if (
+        (intent.type === 'navigate_url' ||
+          intent.type === 'provider_search' ||
+          intent.type === 'web_search_fallback') &&
+        intent.targetUrl
+      ) {
+        if (e.ctrlKey || e.metaKey) {
+          if (typeof chrome !== 'undefined' && chrome.tabs) {
+            chrome.tabs.create({ url: intent.targetUrl, active: false });
+          } else {
+            window.open(intent.targetUrl, '_blank');
+          }
+        } else {
+          window.location.href = intent.targetUrl;
+        }
+      } else if (intent.type === 'command') {
+        const cmd = COMMANDS.find((c) => c.id === intent.commandId || c.keywords.includes(raw.replace(/^\//, '')));
+        if (cmd) {
+          Promise.resolve(cmd.execute()).then((res: any) => {
+            if (res && res.message) this.showToast(res.message);
+          });
+        }
+      }
+      return;
     }
   }
 
   private async executeSuggestion(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
-    // If selecting a bang guide entry (e.g. "!gh <query>"), fill bang into input to let user type query
-    if (item.badge === 'BANG' && item.title.startsWith('!')) {
+    // If selecting a bang guide entry (e.g. "!gh <query>" or "@gh <query>"), fill bang into input to let user type query
+    if (item.badge === 'BANG' && (item.title.startsWith('!') || item.title.startsWith('@'))) {
       const bangPrefix = item.title.split(' ')[0] + ' ';
       this.searchInput.value = bangPrefix;
       this.searchInput.focus();
@@ -681,7 +866,11 @@ class PortalNewTabController {
     if (item.type === 'command' && item.commandId) {
       const cmd = COMMANDS.find((c) => c.id === item.commandId);
       if (cmd) {
-        const res = await cmd.execute();
+        const res = await cmd.execute({
+          sessionId: item.sessionId,
+          tabId: item.tabId,
+          windowId: item.windowId,
+        });
         if (res && res.message) {
           this.showToast(res.message);
         }
@@ -775,14 +964,31 @@ class PortalNewTabController {
       if (item.isAiSuggested) {
         const aiPill = document.createElement('span');
         aiPill.className = 'ai-pill';
-        aiPill.textContent = '✦ AI';
-        aiPill.title = item.cluster?.aiGeneratedReason || 'Discovered from recent browsing';
+        if (item.cluster?.isAiGenerated) {
+          aiPill.textContent = '✦ AI';
+          aiPill.title = item.cluster.aiGeneratedReason || 'Generated by on-device model';
+        } else {
+          aiPill.textContent = 'FREQUENT';
+          aiPill.title = 'Discovered from frequent browsing history';
+        }
         card.appendChild(aiPill);
       }
 
-      // Actions (Pin / Dismiss)
+      // Actions (Pin / Edit / Dismiss)
       const actions = document.createElement('div');
       actions.className = 'shortcut-actions';
+
+      if (item.isPinned) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'shortcut-action-btn';
+        editBtn.innerHTML = Icons.edit;
+        editBtn.title = 'Edit shortcut';
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openEditShortcutModal(item.id, item.title, item.url);
+        });
+        actions.appendChild(editBtn);
+      }
 
       const pinBtn = document.createElement('button');
       pinBtn.className = 'shortcut-action-btn';
@@ -875,7 +1081,25 @@ class PortalNewTabController {
     });
   }
 
-  // --- Contextual Section: Open Tabs & Bookmarks ---
+  private openEditShortcutModal(id?: string, title?: string, url?: string) {
+    const modal = document.getElementById('editShortcutModal');
+    const modalTitle = document.getElementById('editShortcutModalTitle');
+    const idInput = document.getElementById('shortcutIdInput') as HTMLInputElement | null;
+    const titleInput = document.getElementById('shortcutTitleInput') as HTMLInputElement | null;
+    const urlInput = document.getElementById('shortcutUrlInput') as HTMLInputElement | null;
+    const deleteBtn = document.getElementById('deleteShortcutBtn');
+
+    if (modalTitle) modalTitle.textContent = id ? 'Edit Shortcut' : 'Add Shortcut';
+    if (idInput) idInput.value = id || '';
+    if (titleInput) titleInput.value = title || '';
+    if (urlInput) urlInput.value = url || '';
+    if (deleteBtn) deleteBtn.style.display = id ? 'inline-block' : 'none';
+
+    modal?.classList.remove('hidden');
+    titleInput?.focus();
+  }
+
+  // --- Contextual Section: Open Tabs & Recently Closed & Bookmarks ---
 
   private async renderOpenTabs() {
     this.openTabsGrid.innerHTML = '';
@@ -945,6 +1169,107 @@ class PortalNewTabController {
       });
     } catch (err) {
       console.warn('Error loading open tabs:', err);
+    }
+  }
+
+  private async renderRecentlyClosed() {
+    const container = document.getElementById('recentlyClosedGrid');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (typeof chrome === 'undefined' || !chrome.sessions || !chrome.sessions.getRecentlyClosed) {
+      container.innerHTML =
+        '<div style="color:var(--text-muted);font-size:13px;padding:8px;">Recently closed sessions available in Chrome extension mode</div>';
+      return;
+    }
+
+    try {
+      const sessions = await new Promise<chrome.sessions.Session[]>((resolve) => {
+        chrome.sessions.getRecentlyClosed({ maxResults: 15 }, resolve);
+      });
+
+      if (!sessions || sessions.length === 0) {
+        container.innerHTML =
+          '<div style="color:var(--text-muted);font-size:13px;padding:8px;">No recently closed tabs or windows</div>';
+        return;
+      }
+
+      sessions.forEach((s) => {
+        if (s.tab) {
+          const tab = s.tab;
+          const row = document.createElement('div');
+          row.className = 'tab-item-row';
+
+          const iconSlot = document.createElement('div');
+          iconSlot.className = 'tab-icon';
+          if (tab.favIconUrl) {
+            const img = document.createElement('img');
+            img.src = tab.favIconUrl;
+            img.onerror = () => {
+              iconSlot.innerHTML = Icons.history;
+            };
+            iconSlot.appendChild(img);
+          } else {
+            iconSlot.innerHTML = Icons.history;
+          }
+          row.appendChild(iconSlot);
+
+          const title = document.createElement('div');
+          title.className = 'tab-title';
+          title.textContent = tab.title || tab.url || 'Closed tab';
+          row.appendChild(title);
+
+          const badge = document.createElement('span');
+          badge.className = 'suggestion-badge';
+          badge.textContent = 'RESTORE';
+          row.appendChild(badge);
+
+          row.addEventListener('click', async () => {
+            if (tab.sessionId) {
+              await chrome.sessions.restore(tab.sessionId);
+              this.showToast(`Restored: ${tab.title || 'Tab'}`);
+              this.renderRecentlyClosed();
+            }
+          });
+
+          container.appendChild(row);
+        } else if (s.window && s.window.tabs) {
+          const winTabs = s.window.tabs;
+          const row = document.createElement('div');
+          row.className = 'tab-item-row';
+
+          const iconSlot = document.createElement('div');
+          iconSlot.className = 'tab-icon';
+          iconSlot.innerHTML = Icons.tab;
+          row.appendChild(iconSlot);
+
+          const title = document.createElement('div');
+          title.className = 'tab-title';
+          title.textContent = `Window (${winTabs.length} tabs: ${winTabs
+            .map((t) => t.title)
+            .filter(Boolean)
+            .slice(0, 2)
+            .join(', ')}...)`;
+          row.appendChild(title);
+
+          const badge = document.createElement('span');
+          badge.className = 'suggestion-badge';
+          badge.textContent = 'RESTORE WINDOW';
+          row.appendChild(badge);
+
+          row.addEventListener('click', async () => {
+            if (s.window?.sessionId) {
+              await chrome.sessions.restore(s.window.sessionId);
+              this.showToast(`Restored window (${winTabs.length} tabs)`);
+              this.renderRecentlyClosed();
+            }
+          });
+
+          container.appendChild(row);
+        }
+      });
+    } catch (err) {
+      console.warn('Error loading recently closed sessions:', err);
     }
   }
 

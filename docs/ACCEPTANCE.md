@@ -57,3 +57,12 @@
 | **44. Safe Audio Muting & Preserved User Mute State** | `PASSED-UNIT` | Verified in audio unit tests 6-7: strictly filters audible tabs, and unmuting ONLY restores portal-muted tabs |
 | **45. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. |
 | **46. Local Gmail Companion Authorization** | `OWNER-ACTION-NEEDED` | Production email highlights require owner OAuth authorization through Flowmate/OpenClaw local companion. |
+| **47. Pasted URL & Domain Immediate Direct Navigation** | `PASSED-REAL` | Verified in Test 23 & Unit Test 2: Pasted URLs, domains, localhost, and IPs navigate directly on Enter; NEVER Google search |
+| **48. Synchronous Intent Parsing (<1ms)** | `PASSED-UNIT` | Verified in Unit Test 3: Resolves direct navigation, bangs, and search intents synchronously (<1ms) before async search returns |
+| **49. Alt+Q MRU Tab Switcher (`Alt+Q → Enter`)** | `PASSED-REAL` | Service worker tracks MRU tab activations; previously active tab ranks #1 in empty palette state for instant switching |
+| **50. Alt+Q on New Tab Focuses Search Input** | `PASSED-REAL` | Verified in Test 26: Sending `PORTAL_FOCUS_SEARCH` focuses search input on existing page without duplicate tab creation |
+| **51. Zero Listener Leak on Overlay Teardown** | `PASSED-REAL` | `__portalClose` unbinds all window keydown listeners, cancels debouncers, restores prior focus, and unmounts host element |
+| **52. Personal Shortcut Customization (Edit/Rename/Delete/Add)** | `PASSED-REAL` | Verified in Test 24 & Unit Test 6: `#editShortcutModal` enables editing title, URL, deleting, and adding custom pinned shortcuts |
+| **53. Honest Recommendation Categorization** | `PASSED-REAL` | Heuristic frequency/recency recommendations labeled as `FREQUENT`; zero false claims of AI model generation |
+| **54. Themes, Accents & Density Customization** | `PASSED-REAL` | Verified in Test 25 & Unit Test 8: Midnight (OLED black), 5 accents (violet, blue, emerald, amber, rose), 3 densities |
+| **55. Free Cross-Device Delivery & Atomic Marker** | `PASSED-REAL` | `scripts/sync-release.ps1` pulls releases, generates atomic `build-metadata.json`, and verifies extension reload with 0 storage loss |

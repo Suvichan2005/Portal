@@ -70,8 +70,13 @@ export const COMMANDS: BrowserCommand[] = [
     description: 'Create an exact duplicate of the active tab',
     category: 'tabs',
     keywords: ['duplicate', 'clone', 'tab', 'copy'],
-    execute: async () => {
+    execute: async (context) => {
       if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false };
+      const targetTabId = context?.tabId;
+      if (targetTabId) {
+        await chrome.tabs.duplicate(targetTabId);
+        return { success: true, message: 'Tab duplicated' };
+      }
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
         await chrome.tabs.duplicate(tab.id);
@@ -86,8 +91,14 @@ export const COMMANDS: BrowserCommand[] = [
     description: 'Pin or unpin the currently active tab',
     category: 'tabs',
     keywords: ['pin', 'unpin', 'tab', 'dock'],
-    execute: async () => {
+    execute: async (context) => {
       if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false };
+      const targetTabId = context?.tabId;
+      if (targetTabId) {
+        const tab = await chrome.tabs.get(targetTabId);
+        await chrome.tabs.update(targetTabId, { pinned: !tab.pinned });
+        return { success: true, message: tab.pinned ? 'Tab unpinned' : 'Tab pinned' };
+      }
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
         await chrome.tabs.update(tab.id, { pinned: !tab.pinned });
@@ -463,11 +474,11 @@ export const COMMANDS: BrowserCommand[] = [
     description: 'Snapshot all open tabs in this window as a recoverable session',
     category: 'tabs',
     keywords: ['save', 'session', 'workspace', 'backup', 'snapshot', 'store'],
-    execute: async () => {
+    execute: async (context) => {
       if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.windows) return { success: false, message: 'Tabs API not available' };
-      const currentWindow = await chrome.windows.getCurrent();
-      if (!currentWindow?.id) return { success: false, message: 'No current window' };
-      const tabs = await chrome.tabs.query({ windowId: currentWindow.id });
+      const winId = context?.windowId || (await chrome.windows.getCurrent())?.id || (await chrome.windows.getLastFocused())?.id;
+      if (!winId) return { success: false, message: 'No current window found' };
+      const tabs = await chrome.tabs.query({ windowId: winId });
       const validTabs = tabs
         .filter((t) => t.url && !t.url.startsWith('chrome://newtab'))
         .map((t) => ({
@@ -488,24 +499,30 @@ export const COMMANDS: BrowserCommand[] = [
     description: 'Reopen all tabs from your last saved session workspace in a new window',
     category: 'tabs',
     keywords: ['restore', 'session', 'reopen', 'recover', 'workspace', 'load'],
-    execute: async () => {
+    execute: async (context) => {
       if (typeof chrome === 'undefined' || !chrome.windows) return { success: false, message: 'Windows API not available' };
-      const sessions = await storage.getSavedSessions();
-      if (sessions.length === 0) {
-        return { success: false, message: 'No saved sessions found. Use "Save Current Window as Session Workspace" first.' };
+      let targetSession: any = null;
+      if (context?.sessionId) {
+        targetSession = await storage.getSessionById(context.sessionId);
       }
-      const latest = sessions[0];
-      const validUrls = (latest.tabs || [])
-        .map((t) => t.url)
-        .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
+      if (!targetSession) {
+        const sessions = await storage.getSavedSessions();
+        if (sessions.length === 0) {
+          return { success: false, message: 'No saved sessions found. Use "Save Current Window as Session Workspace" first.' };
+        }
+        targetSession = sessions[0];
+      }
+      const validUrls = (targetSession.tabs || [])
+        .map((t: any) => t.url)
+        .filter((url: string) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
 
       if (validUrls.length === 0) {
-        return { success: false, message: `Session "${latest.name}" contains no valid URLs to restore.` };
+        return { success: false, message: `Session "${targetSession.name}" contains no valid URLs to restore.` };
       }
 
       try {
         await chrome.windows.create({ url: validUrls });
-        return { success: true, message: `Restored session "${latest.name}" (${validUrls.length} tabs)` };
+        return { success: true, message: `Restored session "${targetSession.name}" (${validUrls.length} tabs)` };
       } catch (err: any) {
         return { success: false, message: `Failed to restore session window: ${err?.message || 'Unknown error'}` };
       }

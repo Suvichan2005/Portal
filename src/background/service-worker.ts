@@ -8,6 +8,21 @@ import { briefingService } from '../core/intelligence/briefing-service';
 
 console.log('[Portal Service Worker] Initializing v1.3.0...');
 
+// Track Most Recently Used (MRU) tabs across activations
+let mruTabHistory: number[] = [];
+
+if (chrome.tabs?.onActivated) {
+  chrome.tabs.onActivated.addListener((activeInfo) => {
+    mruTabHistory = [activeInfo.tabId, ...mruTabHistory.filter((id) => id !== activeInfo.tabId)].slice(0, 50);
+  });
+}
+
+if (chrome.tabs?.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    mruTabHistory = mruTabHistory.filter((id) => id !== tabId);
+  });
+}
+
 // 1. Installation & Setup
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('[Portal] Extension installed/updated:', details.reason);
@@ -35,6 +50,17 @@ async function handleToggleLauncher(tab?: chrome.tabs.Tab) {
   if (!tab || !tab.id || !tab.url) {
     await openOrFocusPortalTab();
     return;
+  }
+
+  // If already on Portal New Tab, focus its search input rather than opening another redundant tab!
+  const portalUrl = chrome.runtime.getURL('src/newtab/index.html');
+  if (tab.url === portalUrl || tab.url.startsWith('chrome://newtab') || tab.url.startsWith('chrome-extension://')) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'PORTAL_FOCUS_SEARCH' });
+      return;
+    } catch {
+      // Listener may not be active yet; fall through
+    }
   }
 
   // Eligible URLs for script injection (standard http / https pages)
@@ -177,25 +203,46 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
       const intel = await storage.getIntelligence();
       const recentClusters = intel?.clusters || [];
       const tabs = await chrome.tabs.query({});
-      const openTabs: SearchResult[] = tabs
+
+      // Sort tabs by MRU order:
+      // Priority 1: Position in mruTabHistory
+      // Priority 2: tab.lastAccessed timestamp
+      const sortedTabs = tabs
         .filter((t) => t.url && !t.url.startsWith('chrome://newtab') && (!currentTabId || t.id !== currentTabId))
-        .map((t) => ({
+        .sort((a, b) => {
+          const aMruIdx = a.id ? mruTabHistory.indexOf(a.id) : -1;
+          const bMruIdx = b.id ? mruTabHistory.indexOf(b.id) : -1;
+          if (aMruIdx !== -1 && bMruIdx !== -1) return aMruIdx - bMruIdx;
+          if (aMruIdx !== -1) return -1;
+          if (bMruIdx !== -1) return 1;
+          return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+        });
+
+      const openTabs: SearchResult[] = sortedTabs.map((t, idx) => {
+        const isPrevious = idx === 0;
+        return {
           id: `tab-${t.id}`,
           type: 'tab',
           title: t.title || t.url || 'Tab',
           url: t.url,
-          description: `Open tab • ${new URL(t.url || '').hostname}`,
+          description: isPrevious
+            ? `Previously active tab • ${new URL(t.url || '').hostname}`
+            : `Open tab • ${new URL(t.url || '').hostname}`,
           tabId: t.id,
           windowId: t.windowId,
-          badge: 'SWITCH TAB',
-          score: 100,
-        }));
+          badge: isPrevious ? 'SWITCH TAB' : 'TAB',
+          score: isPrevious ? 3000 : 1000 - idx * 20,
+          audible: t.audible,
+          muted: t.mutedInfo?.muted,
+          pinned: t.pinned,
+        };
+      });
 
       return {
         success: true,
         pinned,
         recentClusters: recentClusters.slice(0, 6),
-        openTabs: openTabs.slice(0, 10),
+        openTabs: openTabs.slice(0, 15),
         preferences: prefs,
         shortcutLabel: 'Alt+Q',
         modelStatus: intel?.modelStatus || 'heuristic_active',
@@ -210,6 +257,32 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
       if (message.tabId) {
         await chrome.tabs.remove(message.tabId);
         return { success: true };
+      }
+      return { success: false, error: 'No tabId provided' };
+    }
+
+    case 'PORTAL_TOGGLE_PIN_TAB': {
+      if (message.tabId) {
+        const tab = await chrome.tabs.get(message.tabId);
+        await chrome.tabs.update(message.tabId, { pinned: !tab.pinned });
+        return { success: true, pinned: !tab.pinned };
+      }
+      return { success: false, error: 'No tabId provided' };
+    }
+
+    case 'PORTAL_TOGGLE_MUTE_TAB': {
+      if (message.tabId) {
+        const tab = await chrome.tabs.get(message.tabId);
+        await chrome.tabs.update(message.tabId, { muted: !tab.mutedInfo?.muted });
+        return { success: true, muted: !tab.mutedInfo?.muted };
+      }
+      return { success: false, error: 'No tabId provided' };
+    }
+
+    case 'PORTAL_DUPLICATE_TAB': {
+      if (message.tabId) {
+        const dup = await chrome.tabs.duplicate(message.tabId);
+        return { success: true, tabId: dup?.id };
       }
       return { success: false, error: 'No tabId provided' };
     }
@@ -283,9 +356,25 @@ async function executePortalAction(
 ): Promise<{ success: boolean; message?: string }> {
   // 1. Command execution
   if (item.type === 'command' && item.commandId) {
+    if (item.commandId === 'restore-saved-session' && item.sessionId) {
+      const session = await storage.getSessionById(item.sessionId);
+      if (session && session.tabs.length > 0) {
+        const validUrls = session.tabs
+          .map((t) => t.url)
+          .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
+        if (validUrls.length > 0) {
+          await chrome.windows.create({ url: validUrls });
+          return { success: true, message: `Restored session "${session.name}" (${validUrls.length} tabs)` };
+        }
+      }
+    }
     const cmd = COMMANDS.find((c) => c.id === item.commandId);
     if (cmd) {
-      const res = await cmd.execute();
+      const res = await cmd.execute({
+        windowId: sender.tab?.windowId,
+        tabId: sender.tab?.id,
+        sessionId: item.sessionId,
+      });
       return res || { success: true };
     }
     return { success: false, message: `Command ${item.commandId} not found` };

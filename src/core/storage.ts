@@ -143,9 +143,31 @@ class StorageService {
     return updated;
   }
 
-  async unpinShortcut(url: string): Promise<PinnedShortcut[]> {
+  async unpinShortcut(idOrUrl: string): Promise<PinnedShortcut[]> {
     const current = await this.getPinnedShortcuts();
-    const updated = current.filter((p) => p.url !== url);
+    const updated = current.filter((p) => p.id !== idOrUrl && p.url !== idOrUrl);
+    if (this.isExtensionEnvironment()) {
+      await new Promise<void>((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
+      });
+    } else {
+      this.setRaw(STORAGE_KEYS.PINNED, JSON.stringify(updated));
+    }
+    return updated;
+  }
+
+  async updateShortcut(id: string, updates: Partial<PinnedShortcut>): Promise<PinnedShortcut[]> {
+    const current = await this.getPinnedShortcuts();
+    const updated = current.map((p) => {
+      if (p.id === id) {
+        return {
+          ...p,
+          ...updates,
+          id: p.id, // preserve id
+        };
+      }
+      return p;
+    });
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());

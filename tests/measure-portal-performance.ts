@@ -17,9 +17,25 @@ async function benchmarkPortal() {
 
   let sw = (await context.serviceWorkers())[0];
   if (!sw) {
-    sw = await context.waitForEvent('serviceworker');
+    try {
+      sw = await context.waitForEvent('serviceworker', { timeout: 4000 });
+    } catch {}
   }
-  const extId = sw.url().split('/')[2];
+  let extId = sw ? sw.url().split('/')[2] : '';
+  if (!extId) {
+    const probe = await context.newPage();
+    await probe.goto('chrome://extensions');
+    await probe.waitForTimeout(1000);
+    sw = (await context.serviceWorkers())[0];
+    extId = sw ? sw.url().split('/')[2] : '';
+    await probe.close();
+  }
+
+  if (!extId) {
+    console.error('Could not detect loaded extension ID.');
+    await context.close();
+    return;
+  }
   const portalUrl = `chrome-extension://${extId}/src/newtab/index.html`;
 
   const page = await context.newPage();

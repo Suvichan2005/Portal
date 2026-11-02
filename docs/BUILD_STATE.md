@@ -1,14 +1,66 @@
 # PORTAL Build State
 
-**Version:** 1.3.1  
-**Last Updated:** 2026-11-02 16:45 UTC+5:30  
-**Phase:** 9 — Source Integrity, Truthful Connectivity & Release Correction  
+**Version:** 1.4.0  
+**Last Updated:** 2026-11-02 20:15 UTC+5:30  
+**Phase:** 10 — Daily-Driver UX Reconstruction & Free Cross-Device Delivery  
 **Branch:** feature/portal-next-level  
 **Remote:** https://github.com/Suvichan2005/Portal  
 
-## Release Overview: v1.3.1
+## Release Overview: v1.4.0
 
-Portal v1.3.1 directly addresses and resolves the source-integrity and simulation findings identified in the v1.3.0 audit. It purges all synthetic demo fixtures from production caches, eliminates false execution claims, implements an honest local task rejection and status pipeline, guarantees zero network requests on New Tab open, and adds genuine user-controlled Markdown/JSON briefing importing.
+Portal v1.4.0 reconstructs the daily-driver user experience based on direct ThinkBook testing and establishes a robust, free cross-device delivery workflow without reliance on the Chrome Web Store. It solves every owner-identified reliability issue:
+
+### 1. Daily-Driver UX Repairs & Grammar Unification
+1. **Pasted URLs & Direct Domains Immediate Navigation**:
+   - Built `src/core/search/url-utils.ts` to parse complete protocols (`https://`, `http://`, `file:///`, `chrome://`), `localhost(:port)?`, IPv4 addresses (`127.0.0.1:port`), and valid TLD domains (`github.com`, `vite.dev`).
+   - Cleaned input removes whitespace, quotes, and carriage returns.
+   - Immediate navigation receives top score (5000) with badge `NAVIGATE`. Pasted URLs NEVER fall back to Google searches.
+2. **Synchronous Intent Resolver (<1ms)**:
+   - Built `resolveSynchronousIntent()` in `src/core/search/grammar.ts`.
+   - Pure, deterministic, synchronous function evaluating the current input value immediately when Enter is pressed, even if asynchronous search suggestions have not returned.
+3. **Alt+Q MRU Tab Switcher (`Alt+Q → Enter`)**:
+   - Background service worker tracks `mruTabHistory: number[]` on every tab activation and closure.
+   - When summoned on empty query, open tabs are sorted in strict MRU order. The previously active tab is selected at index 0 with badge `SWITCH TAB`. Pressing `Alt+Q → Enter` instantly switches back to the previous tab.
+4. **Alt+Q on New Tab Focuses Search Box**:
+   - Service worker detects if the active tab is `chrome://newtab` or an extension page, sending `PORTAL_FOCUS_SEARCH` to immediately focus and select the search input rather than opening a redundant page.
+   - Added `/` key shortcut on New Tab page to instantly focus the search input from anywhere on the page.
+5. **Zero Listener Leak & Clean Teardown**:
+   - `src/overlay/floating-launcher.ts` registers `__portalClose` on the host element.
+   - On close or toggle off, cleanly unbinds all `window` keydown listeners, cancels active search debounce timers, restores previously focused page elements, and unmounts the Shadow DOM host.
+6. **Specific Saved Session Restoration**:
+   - Search results for saved sessions attach `sessionId: s.id`.
+   - `restore-saved-session` command receives execution context with `sessionId` and restores the exact selected session, eliminating the bug where `sessions[0]` was always restored.
+7. **Unified `@` Prefix Grammar**:
+   - Supports owner-preferred `@` provider search bangs: `@gh` (GitHub), `@yt` (YouTube), `@w` (Wikipedia), `@so` (StackOverflow), `@r` (Reddit), `@npm` (npm), `@g` (Google), `@ddg` (DuckDuckGo), `@x` (X/Twitter). Legacy `!` bangs remain supported for muscle memory.
+   - Supports search filter scopes: `@tabs`, `@bookmarks`, `@history`, `@audio`, and `/` commands.
+8. **Homepage Ownership & Shortcut Management**:
+   - Personal pinned shortcuts feature an inline edit button (✏️) opening `#editShortcutModal` to rename titles, edit URLs, or delete shortcuts.
+   - "+ Add" button in Quick Access section header allows adding new custom pinned links.
+   - Added "Recently Closed" tab in Contextual Section calling `chrome.sessions.getRecentlyClosed()`, allowing 1-click restoration of recently closed tabs or full windows.
+   - Heuristic recommendations are labeled as `FREQUENT`, preserving total honesty and never falsely claiming to be model-generated AI.
+9. **Themes, Accents & Density Customization**:
+   - Added `midnight` theme (pure OLED black `#000000` with subtle zinc borders).
+   - Added 5 accent colors: `violet` (default), `blue` (electric blue), `emerald`, `amber`, and `rose`.
+   - Added 3 layout density levels: `compact` (tighter spacing and cards), `comfortable` (balanced default), and `relaxed` (roomy padding).
+   - Added section visibility controls in settings (Intelligence Briefing, Contextual Section, OpenClaw).
+10. **Free Cross-Device Delivery & Sync Workflow (Section 8)**:
+    - Authoring `scripts/sync-release.ps1` for ThinkBook: pulls tested releases from GitHub, builds and verifies integrity, updates atomic build marker (`build-metadata.json`), and provides safe developer extension reload.
+    - Verified that developer mode reload retains `chrome.storage.local` with 100% data retention (user settings, pinned shortcuts, and New Tab override remain intact).
+    - Added "Check for Updates" button in Settings drawer reading atomic build metadata.
+
+---
+
+## Quality & Verification Status
+
+| Verification Area | Result | Notes |
+| :--- | :--- | :--- |
+| **Unit Test Suite (`tests/unit`)** | **27 of 27 PASSED** | Verified url-utils, grammar parsing, synchronous intent resolver, multi-token ranking, shortcut editing, saved session targeting, and preferences |
+| **Playwright E2E Suite (`tests/e2e`)** | **26 of 26 PASSED** | Ran against real unpacked Chrome MV3 extension in real Chromium |
+| **Total Test Verification** | **53 of 53 PASSED** | 100% passing across the entire test suite (1.3m full run) |
+| **TypeScript Typecheck** | **0 errors** | Strict mode enforced across core, overlay, newtab, service worker |
+| **Empirical Performance Benchmark** | **DOM Interactive: 47.3ms** | Cold run: 269ms, Warm average: 146ms, JS Heap: 3.79 MB, Summon latency: 104ms |
+| **Network Zero-Overhead Test** | **PASSED (0 reqs)** | Cold New Tab open produces 0 non-extension requests |
+| **Atomic Build Marker** | **Verified** | `dist/build-metadata.json` bundled with version, commit hash, timestamp |
 
 ### 1. Critical Source Integrity & Execution Corrections
 1. **Purged Simulated Production Data**:

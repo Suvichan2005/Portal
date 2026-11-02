@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-C3HiwFbD.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/briefing-service-cbwpa2EY.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-BtuoWTwq.css">
+  <script type="module" crossorigin src="/assets/newtab-DoiiaSu7.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-C_CNz6TS.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-v4D3oLpL.css">
 </head>
 <body>
   <!-- Ambient background glow -->
@@ -60,7 +61,10 @@
       <!-- Quick Access Section (Pinned + Intelligent AI Suggestions) -->
       <section class="shortcuts-section" id="shortcutsSection">
         <div class="section-header">
-          <h2 class="section-title">Quick Access</h2>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h2 class="section-title">Quick Access</h2>
+            <button id="addShortcutBtn" class="add-shortcut-btn" title="Add custom pinned shortcut" aria-label="Add shortcut">+ Add</button>
+          </div>
           <div class="intelligence-badge" id="aiStatusBadge" title="AI & Discovery Status">
             <span class="badge-icon" id="aiBadgeIcon"></span>
             <span class="badge-label" id="aiBadgeLabel">Intelligent Engine</span>
@@ -146,15 +150,20 @@
         </div>
       </section>
 
-      <!-- Contextual Section (Open Tabs & Bookmark Collections) -->
+      <!-- Contextual Section (Open Tabs & Bookmark Collections & Recently Closed) -->
       <section class="contextual-section" id="contextualSection">
         <div class="tabs-nav">
           <button class="nav-tab active" data-tab="open-tabs" id="tabOpenTabsBtn">Open Tabs</button>
+          <button class="nav-tab" data-tab="recently-closed" id="tabRecentlyClosedBtn">Recently Closed</button>
           <button class="nav-tab" data-tab="bookmarks" id="tabBookmarksBtn">Bookmarks</button>
         </div>
 
         <div class="tab-content" id="openTabsContent">
           <div class="open-tabs-grid" id="openTabsGrid"></div>
+        </div>
+
+        <div class="tab-content hidden" id="recentlyClosedContent">
+          <div class="open-tabs-grid" id="recentlyClosedGrid"></div>
         </div>
 
         <div class="tab-content hidden" id="bookmarksContent">
@@ -176,7 +185,26 @@
             <select id="themeSelect">
               <option value="system">System Default</option>
               <option value="dark">Dark</option>
+              <option value="midnight">Midnight (OLED Black)</option>
               <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="accentSelect">Accent Color</label>
+            <select id="accentSelect">
+              <option value="violet">Violet (Default)</option>
+              <option value="blue">Electric Blue</option>
+              <option value="emerald">Emerald</option>
+              <option value="amber">Amber</option>
+              <option value="rose">Rose</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="densitySelect">Layout Density</label>
+            <select id="densitySelect">
+              <option value="compact">Compact (Tighter Spacing)</option>
+              <option value="comfortable">Comfortable (Balanced)</option>
+              <option value="relaxed">Relaxed (Roomy)</option>
             </select>
           </div>
           <div class="setting-item">
@@ -193,6 +221,11 @@
             <input type="checkbox" id="toggleIntelBriefing" checked style="margin-top:6px;">
           </div>
           <div class="setting-item">
+            <label for="toggleContextualSection">Contextual Section (Tabs & Bookmarks)</label>
+            <div class="setting-desc">Display open tabs, recently closed sessions, and bookmarks.</div>
+            <input type="checkbox" id="toggleContextualSection" checked style="margin-top:6px;">
+          </div>
+          <div class="setting-item">
             <label for="toggleOpenClaw">OpenClaw Activity & Gateway Bridge</label>
             <div class="setting-desc">Display Gateway status and local/remote node orchestrator.</div>
             <input type="checkbox" id="toggleOpenClaw" checked style="margin-top:6px;">
@@ -205,8 +238,8 @@
           <div class="setting-item">
             <label>Search Bangs & Filter Modifiers</label>
             <div class="setting-desc">
-              Type <span class="kbd">!gh</span> (GitHub), <span class="kbd">!yt</span> (YouTube), <span class="kbd">!w</span> (Wikipedia), <span class="kbd">!so</span> (Stack Overflow), or <span class="kbd">!npm</span>.<br>
-              Filter with <span class="kbd">@</span> for open tabs, <span class="kbd">#</span> for bookmarks, <span class="kbd">/</span> for commands.
+              Type <span class="kbd">@gh</span> (GitHub), <span class="kbd">@yt</span> (YouTube), <span class="kbd">@w</span> (Wikipedia), <span class="kbd">@so</span> (Stack Overflow), or <span class="kbd">@npm</span>.<br>
+              Filter with <span class="kbd">@tabs</span>, <span class="kbd">@bookmarks</span>, <span class="kbd">@history</span>, or <span class="kbd">/command</span>.
             </div>
           </div>
           <div class="setting-item">
@@ -215,14 +248,40 @@
           </div>
           <div class="setting-item">
             <label>Floating Command Palette</label>
-            <div class="setting-desc">Press <span class="kbd">Alt+Q</span> on any webpage to switch tabs and run browser commands.</div>
+            <div class="setting-desc">Press <span class="kbd">Alt+Q</span> on any webpage to switch tabs (MRU) and run browser commands.</div>
           </div>
           <div class="setting-item">
             <label>Native Omnibox</label>
             <div class="setting-desc">Type <span class="kbd">p</span> then press <span class="kbd">Space</span> in Chrome address bar.</div>
           </div>
-          <div class="setting-item action-item">
+          <div class="setting-item action-item" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn secondary-btn" id="checkForUpdatesBtn">Check for Updates</button>
             <button class="btn danger-btn" id="clearDataBtn">Clear AI Recommendation Cache</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit / Add Shortcut Modal -->
+    <div class="settings-modal-backdrop hidden" id="editShortcutModal">
+      <div class="settings-dialog">
+        <div class="settings-header">
+          <h3 id="editShortcutModalTitle">Edit Shortcut</h3>
+          <button class="icon-btn" id="closeEditShortcutModalBtn">&times;</button>
+        </div>
+        <div class="settings-body">
+          <div class="setting-item">
+            <label for="shortcutTitleInput">Title</label>
+            <input type="text" id="shortcutTitleInput" class="portal-text-input" placeholder="e.g. GitHub" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
+          </div>
+          <div class="setting-item">
+            <label for="shortcutUrlInput">URL</label>
+            <input type="text" id="shortcutUrlInput" class="portal-text-input" placeholder="https://github.com" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
+          </div>
+          <input type="hidden" id="shortcutIdInput" />
+          <div style="display:flex; justify-content:space-between; margin-top:16px;">
+            <button class="btn danger-btn" id="deleteShortcutBtn" style="display:none;">Delete</button>
+            <button class="btn" id="saveShortcutBtn" style="margin-left:auto;">Save Shortcut</button>
           </div>
         </div>
       </div>
@@ -285,8 +344,8 @@
 
     <!-- Minimal Footer -->
     <footer class="portal-footer">
-      <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page</span>
-      <span class="footer-status" id="footerStatus">Portal v1.3.1</span>
+      <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page • <span class="kbd">/</span> to search</span>
+      <span class="footer-status" id="footerStatus">Portal v1.4.0</span>
     </footer>
   </div>
 

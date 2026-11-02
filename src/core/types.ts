@@ -58,19 +58,21 @@ export interface CustomAlias {
 }
 
 export interface UserPreferences {
-  theme: 'system' | 'dark' | 'light';
+  theme: 'system' | 'dark' | 'light' | 'midnight';
+  accentColor?: 'violet' | 'blue' | 'emerald' | 'amber' | 'rose';
   searchEngine: 'google' | 'duckduckgo' | 'bing';
   maxSuggestions: number;
   showRecentTabs: boolean;
   showIntelligentShortcuts: boolean;
   reducedMotion: boolean;
-  density: 'compact' | 'comfortable';
+  density: 'compact' | 'comfortable' | 'relaxed';
   zenMode?: boolean;
   autoDetectClipboardUrl?: boolean;
   showIntelligenceBriefing?: boolean;
   showImportantMail?: boolean;
   showOpenClawStatus?: boolean;
   hideMailPreviews?: boolean;
+  showContextualSection?: boolean;
 }
 
 export interface HistoryCluster {
@@ -82,14 +84,21 @@ export interface HistoryCluster {
   visits: number;
   score: number;
   recentTitles: string[];
-  aiGeneratedReason?: string;
+  aiGeneratedReason: string;
+  isAiGenerated?: boolean;
 }
 
 export interface CachedIntelligence {
   clusters: HistoryCluster[];
   lastAnalyzed: number;
-  modelStatus: 'gemini_nano_active' | 'heuristic_active' | 'unavailable';
+  modelStatus: string;
   deviceModelName?: string;
+}
+
+export interface CommandExecutionContext {
+  windowId?: number;
+  tabId?: number;
+  sessionId?: string;
 }
 
 export interface BrowserCommand {
@@ -98,7 +107,7 @@ export interface BrowserCommand {
   description: string;
   category: 'tabs' | 'navigation' | 'settings' | 'history';
   keywords: string[];
-  execute: () => Promise<{ success: boolean; message?: string }> | { success: boolean; message?: string } | void;
+  execute: (context?: CommandExecutionContext) => Promise<{ success: boolean; message?: string }> | { success: boolean; message?: string } | void;
 }
 
 export interface InitialLauncherState {
@@ -239,4 +248,8 @@ export type PortalMessage =
   | { type: 'PORTAL_GET_INTELLIGENCE_SNAPSHOT' }
   | { type: 'PORTAL_REFRESH_INTELLIGENCE' }
   | { type: 'PORTAL_GET_OPENCLAW_STATUS' }
-  | { type: 'PORTAL_SUBMIT_OPENCLAW_ACTION'; action: string; host?: string };
+  | { type: 'PORTAL_SUBMIT_OPENCLAW_ACTION'; action: string; host?: string }
+  | { type: 'PORTAL_TOGGLE_PIN_TAB'; tabId: number; pinned: boolean }
+  | { type: 'PORTAL_TOGGLE_MUTE_TAB'; tabId: number; muted: boolean }
+  | { type: 'PORTAL_DUPLICATE_TAB'; tabId: number }
+  | { type: 'PORTAL_FOCUS_SEARCH' };

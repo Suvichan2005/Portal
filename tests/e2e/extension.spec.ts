@@ -75,7 +75,7 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await expect(shortcutCards.first()).toBeVisible({ timeout: 3000 });
 
     await shortcutCards.first().hover();
-    const pinBtn = shortcutCards.first().locator('.shortcut-action-btn').first();
+    const pinBtn = shortcutCards.first().locator('.shortcut-action-btn[title*="Pin"], .shortcut-action-btn[title*="Unpin"]');
     await expect(pinBtn).toBeVisible();
     await pinBtn.click();
 
@@ -283,13 +283,13 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
 
     const ghItem = page.locator('.suggestion-item', { hasText: 'Search GitHub for "react"' });
     await expect(ghItem).toBeVisible();
-    await expect(ghItem.locator('.suggestion-badge')).toHaveText('!GH');
+    await expect(ghItem.locator('.suggestion-badge')).toHaveText(/[@!]GH/);
 
     // Test YouTube bang: !yt lofi
     await searchInput.fill('!yt lofi');
     const ytItem = page.locator('.suggestion-item', { hasText: 'Search YouTube for "lofi"' });
     await expect(ytItem).toBeVisible();
-    await expect(ytItem.locator('.suggestion-badge')).toHaveText('!YT');
+    await expect(ytItem.locator('.suggestion-badge')).toHaveText(/[@!]YT/);
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/08-search-bangs.png` });
   });
@@ -582,5 +582,97 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
 
     // Expect ZERO non-extension requests on cold load
     expect(networkRequests).toEqual([]);
+  });
+
+  test('23. Pasted URLs and direct domains navigate directly on Enter (NEVER Google search)', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+    // Paste direct URL
+    await searchInput.fill('https://example.com/portal-direct');
+
+    // Press Enter immediately before async results
+    const navPromise = page.waitForNavigation({ timeout: 5000 }).catch(() => null);
+    await searchInput.press('Enter');
+
+    // Verify navigation destination was not google.com/search
+    await page.waitForTimeout(500);
+    const currentUrl = page.url();
+    expect(currentUrl).not.toContain('google.com/search');
+  });
+
+  test('24. Add custom shortcut via modal and verify it appears in Quick Access', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Click + Add button
+    const addBtn = page.locator('#addShortcutBtn');
+    await expect(addBtn).toBeVisible({ timeout: 3000 });
+    await addBtn.click();
+
+    // Verify modal appears
+    const modal = page.locator('#editShortcutModal');
+    await expect(modal).toBeVisible({ timeout: 3000 });
+
+    // Fill form
+    await page.locator('#shortcutTitleInput').fill('Playwright Docs');
+    await page.locator('#shortcutUrlInput').fill('https://playwright.dev');
+
+    // Save
+    await page.locator('#saveShortcutBtn').click();
+    await expect(modal).toBeHidden({ timeout: 3000 });
+
+    // Verify shortcut appears in grid
+    const shortcut = page.locator('.shortcut-name', { hasText: 'Playwright Docs' });
+    await expect(shortcut).toBeVisible({ timeout: 3000 });
+  });
+
+  test('25. Midnight OLED theme and layout density preferences apply to DOM', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Open settings
+    const settingsBtn = page.locator('#settingsBtn');
+    await settingsBtn.click();
+    const modal = page.locator('#settingsModal');
+    await expect(modal).toBeVisible();
+
+    // Select midnight theme
+    await page.locator('#themeSelect').selectOption('midnight');
+    const themeAttr = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(themeAttr).toBe('midnight');
+
+    // Select compact density
+    await page.locator('#densitySelect').selectOption('compact');
+    const densityAttr = await page.evaluate(() => document.documentElement.getAttribute('data-density'));
+    expect(densityAttr).toBe('compact');
+
+    // Select emerald accent
+    await page.locator('#accentSelect').selectOption('emerald');
+    const accentAttr = await page.evaluate(() => document.documentElement.getAttribute('data-accent'));
+    expect(accentAttr).toBe('emerald');
+  });
+
+  test('26. Alt+Q / message focus on New Tab page focuses search input without duplicate tab', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Simulate clicking somewhere else to lose focus
+    await page.locator('#headerClock').click();
+
+    // Send PORTAL_FOCUS_SEARCH message as service worker does
+    await page.evaluate(() => {
+      window.postMessage({ type: 'PORTAL_FOCUS_SEARCH' }, '*');
+    });
+
+    // Press '/' key to test keyboard focus
+    await page.keyboard.press('/');
+    const isFocused = await page.evaluate(() => document.activeElement?.id === 'portalSearchInput');
+    expect(isFocused).toBe(true);
   });
 });

@@ -143,3 +143,36 @@
 - **Decision:** Provide an explicit "Import Briefing" button and modal dialog (`#importBriefingModal`). The parser supports standard Markdown bullet lists (with optional task checkboxes `[ ]` / `[x]`) and structured JSON, validating items before storing them locally.
 - **Alternative Rejected:** Requiring users to configure external API tokens or wait for daemon pairing.
 - **Impact:** Immediate utility on clean installs without sacrificing offline-first principles or data integrity.
+
+## DEC-024: Synchronous Intent Resolution & Direct Navigation Invariant
+- **Context:** On ThinkBook testing, pasted URLs and direct domains were frequently hijacked by Google search when Enter was pressed before asynchronous suggestion scoring returned.
+- **Decision:** Create a synchronous intent resolver `resolveSynchronousIntent()` that executes in <1ms without depending on async ranking. When Enter is pressed, if the input is a valid protocol URL, `localhost(:port)?`, IPv4, or recognized TLD domain, Portal navigates directly to that URL with priority score 5000 (`NAVIGATE`), completely bypassing Google search.
+- **Alternative Rejected:** Waiting for asynchronous search debounce before enabling the Enter key (causes perceived sluggishness).
+- **Impact:** 100% reliable direct navigation on paste, zero Google search hijacking for valid web destinations.
+
+## DEC-025: Unified `@` Prefix Grammar & Token Hierarchy
+- **Context:** Power users preferred DuckDuckGo/Flowmate-style `@` prefixes over `!` for provider bangs, site-scoped searching, and tab/history filtering.
+- **Decision:** Establish a unified `@` prefix grammar: `@gh` (GitHub), `@yt` (YouTube), `@w` (Wikipedia), `@so` (StackOverflow), `@r` (Reddit), `@npm` (npm), `@g` (Google), `@ddg` (DuckDuckGo), `@x` (X/Twitter). Maintain legacy `!` bangs for backward muscle memory. Filter scopes use `@tabs`, `@bookmarks`, `@history`, `@audio`. Commands use `/`.
+- **Alternative Rejected:** Rigidly enforcing only one prefix character.
+- **Impact:** Clean, modern search ergonomics aligned with user preferences while preserving muscle memory.
+
+## DEC-026: MRU Tab History Tracking & NewTab Focus Handoff
+- **Context:** In standard Chrome, switching back to the previously active tab requires cumbersome shortcuts. Additionally, pressing `Alt+Q` while already on a New Tab page opened redundant launcher instances or new tabs.
+- **Decision:** In `service-worker.ts`, maintain an in-memory `mruTabHistory: number[]` updated on `chrome.tabs.onActivated` and `onRemoved`. When `Alt+Q` is pressed on a New Tab page, the service worker sends a `PORTAL_FOCUS_SEARCH` message to immediately focus and select the homepage search box. When summoned on a webpage, the empty palette state places the previously active tab at index 0 with badge `SWITCH TAB`, guaranteeing that `Alt+Q → Enter` instantly switches to the previous tab.
+- **Alternative Rejected:** Opening duplicate new tab pages or ignoring `Alt+Q` on New Tab.
+- **Impact:** Seamless, lightning-fast MRU tab switching and zero redundant page openings.
+
+## DEC-027: Shadow DOM Teardown & Complete Event Listener Cleanup
+- **Context:** Repeatedly toggling the floating command palette over complex web pages left orphaned `window` keydown listeners and timers in memory.
+- **Decision:** Implement an explicit `__portalClose` teardown function attached to the Shadow DOM host. Closing the overlay unbinds all `window` keydown listeners, cancels pending search debounce timers, restores focus to the previously active element on the page, and unmounts the host node.
+- **Alternative Rejected:** Merely hiding the overlay with CSS `display: none` while leaving listeners active.
+- **Impact:** Zero memory leaks, zero event interference with underlying web applications.
+
+## DEC-028: Free Cross-Device Delivery via Atomic Metadata & PowerShell Sync
+- **Context:** The owner requested a reliable, zero-cost delivery workflow to sync verified releases from the IdeaPad development machine to the ThinkBook primary workstation without paying for a Chrome Web Store developer account.
+- **Decision:** Implement a lightweight Git-and-PowerShell synchronization workflow:
+  1. Author `scripts/sync-release.ps1` for ThinkBook, pulling tested code from GitHub, running local build/typecheck verification, and updating an atomic `build-metadata.json` marker containing version, commit hash, and timestamp.
+  2. Verify that reloading an unpacked developer extension preserves `chrome.storage.local` with 100% data retention (user preferences, pinned shortcuts, and New Tab override remain untouched).
+  3. Provide a "Check for Updates" button in Portal preferences displaying the active build metadata.
+- **Alternative Rejected:** Uploading private builds to Chrome Web Store (requires developer fees and store review delays).
+- **Impact:** Instant, zero-cost, private cross-device release delivery between IdeaPad and ThinkBook.

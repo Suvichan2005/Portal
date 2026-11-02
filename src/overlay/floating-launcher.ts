@@ -1,13 +1,19 @@
 import { SearchResult, InitialLauncherState } from '../core/types';
 import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
+import { resolveSynchronousIntent } from '../core/search/grammar';
+import { cleanPastedInput } from '../core/search/url-utils';
 
 (function initPortalFloatingLauncher() {
   const ROOT_ID = 'portal-floating-launcher-root';
   const existingRoot = document.getElementById(ROOT_ID);
 
-  // If already open, toggle off cleanly
+  // If already open, toggle off cleanly by executing its registered cleanup
   if (existingRoot) {
-    existingRoot.remove();
+    if (typeof (existingRoot as any).__portalClose === 'function') {
+      (existingRoot as any).__portalClose();
+    } else {
+      existingRoot.remove();
+    }
     return;
   }
 
@@ -34,31 +40,31 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", Arial, sans-serif;
-    }
-    :host {
-      all: initial;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
     .scrim {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       display: flex;
-      justify-content: center;
       align-items: flex-start;
+      justify-content: center;
       padding-top: 14vh;
-      animation: fadeIn 0.15s ease-out;
+      animation: fadeIn 0.12s ease-out;
     }
     .modal {
       width: 640px;
       max-width: 92vw;
-      background: #141517;
-      color: #f4f4f6;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #121316;
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 14px;
-      box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -70,23 +76,26 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       padding: 14px 18px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       gap: 12px;
-      background: rgba(255, 255, 255, 0.02);
     }
     .search-icon {
-      color: #8e9099;
+      width: 20px;
+      height: 20px;
+      color: #71717a;
       display: flex;
       align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
-    input {
+    .search-input {
       flex: 1;
       background: transparent;
       border: none;
       outline: none;
-      color: #fafafa;
+      color: #f4f4f6;
       font-size: 16px;
-      font-weight: 400;
+      line-height: 1.4;
     }
-    input::placeholder {
+    .search-input::placeholder {
       color: #5e606a;
     }
     .kbd-tag {
@@ -184,35 +193,31 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       border: 1px solid rgba(99, 102, 241, 0.25);
       flex-shrink: 0;
     }
-    .quick-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 8px;
-      padding: 6px 10px 12px 10px;
-    }
-    .quick-card {
-      display: flex;
+    .item-actions {
+      display: none;
       align-items: center;
-      gap: 8px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 8px;
-      padding: 8px 10px;
+      gap: 4px;
+      margin-left: 6px;
+    }
+    .result-item:hover .item-actions,
+    .result-item.selected .item-actions {
+      display: flex;
+    }
+    .action-icon-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 11px;
+      color: #a1a1aa;
       cursor: pointer;
-      transition: all 0.12s ease;
+      line-height: 1;
+      transition: all 0.1s ease;
     }
-    .quick-card:hover, .quick-card.selected {
-      background: rgba(255, 255, 255, 0.09);
-      border-color: rgba(99, 102, 241, 0.4);
-      transform: translateY(-1px);
-    }
-    .quick-card .q-title {
-      font-size: 12px;
-      font-weight: 500;
-      color: #f4f4f6;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .action-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.3);
     }
     .footer {
       display: flex;
@@ -249,7 +254,7 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
   `;
   shadow.appendChild(styleEl);
 
-  // Modal Structure
+  // Scrim and modal container
   const scrim = document.createElement('div');
   scrim.className = 'scrim';
 
@@ -261,11 +266,12 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 
   const searchIcon = document.createElement('div');
   searchIcon.className = 'search-icon';
-  searchIcon.innerHTML = Icons.search;
+  searchIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`;
 
   const input = document.createElement('input');
   input.type = 'text';
-  input.placeholder = 'Search tabs, bookmarks, history, commands, or web...';
+  input.className = 'search-input';
+  input.placeholder = 'Search tabs, history, bookmarks, or type a URL...';
   input.autocomplete = 'off';
   input.spellcheck = false;
 
@@ -293,7 +299,8 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
   footer.innerHTML = `
     <div class="shortcuts">
       <span><span class="kbd-tag">↑↓</span> Navigate</span>
-      <span><span class="kbd-tag">↵</span> Open / Switch</span>
+      <span><span class="kbd-tag">↵</span> Switch / Open</span>
+      <span><span class="kbd-tag">Alt+W</span> Close Tab</span>
       <span><span class="kbd-tag">Esc</span> Close</span>
     </div>
     <div>Portal Launcher</div>
@@ -313,9 +320,11 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
   let selectedIndex = 0;
   let initialState: InitialLauncherState | null = null;
   let debounceTimer: any = null;
+  let searchSeq = 0;
 
-  // Cleanup helper
+  // Cleanup helper: thoroughly releases every listener and DOM resource
   function closeOverlay() {
+    clearTimeout(debounceTimer);
     window.removeEventListener('keydown', handleGlobalKeydown, true);
     host.remove();
     if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
@@ -324,6 +333,9 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       } catch {}
     }
   }
+
+  // Register cleanup on host node so subsequent toggle-offs invoke it cleanly
+  (host as any).__portalClose = closeOverlay;
 
   // Scrim click closes
   scrim.addEventListener('click', (e) => {
@@ -396,6 +408,64 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
         li.appendChild(badge);
       }
 
+      // Secondary fast action buttons for open tabs
+      if (res.type === 'tab' && res.tabId) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'item-actions';
+
+        // Pin / unpin button
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'action-icon-btn';
+        pinBtn.title = res.pinned ? 'Unpin tab (Alt+P)' : 'Pin tab (Alt+P)';
+        pinBtn.textContent = res.pinned ? '📌' : '📍';
+        pinBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_PIN_TAB', tabId: res.tabId! }, (r) => {
+            if (r?.success) {
+              res.pinned = r.pinned;
+              pinBtn.textContent = r.pinned ? '📌' : '📍';
+              showNotice(r.pinned ? 'Tab pinned' : 'Tab unpinned');
+            }
+          });
+        });
+        actionsDiv.appendChild(pinBtn);
+
+        // Mute / unmute button
+        const muteBtn = document.createElement('button');
+        muteBtn.className = 'action-icon-btn';
+        muteBtn.title = res.muted ? 'Unmute tab (Alt+M)' : 'Mute tab (Alt+M)';
+        muteBtn.textContent = res.muted ? '🔇' : '🔊';
+        muteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_MUTE_TAB', tabId: res.tabId! }, (r) => {
+            if (r?.success) {
+              res.muted = r.muted;
+              muteBtn.textContent = r.muted ? '🔇' : '🔊';
+              showNotice(r.muted ? 'Tab muted' : 'Tab unmuted');
+            }
+          });
+        });
+        actionsDiv.appendChild(muteBtn);
+
+        // Close tab button
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'action-icon-btn';
+        closeBtn.title = 'Close Tab (Alt+W)';
+        closeBtn.textContent = '✕';
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chrome.runtime.sendMessage({ type: 'PORTAL_CLOSE_TAB', tabId: res.tabId! }, () => {
+            currentResults = currentResults.filter((r) => r.tabId !== res.tabId);
+            if (selectedIndex >= currentResults.length) selectedIndex = Math.max(0, currentResults.length - 1);
+            renderResults();
+            showNotice('Tab closed');
+          });
+        });
+        actionsDiv.appendChild(closeBtn);
+
+        li.appendChild(actionsDiv);
+      }
+
       li.addEventListener('click', (e) => executeResult(res, e));
       li.addEventListener('mouseenter', () => {
         selectedIndex = idx;
@@ -450,12 +520,12 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 
   // Execute selected item via runtime messaging to service worker!
   async function executeResult(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
-    // If selecting a bang guide entry (e.g. "!gh <query>"), fill bang into input so user can type search terms
-    if (item.badge === 'BANG' && item.title.startsWith('!')) {
-      const bangPrefix = item.title.split(' ')[0] + ' ';
-      input.value = bangPrefix;
+    // If selecting a provider guide entry (e.g. "@gh <query>"), fill prefix into input so user can type terms
+    if (item.badge && item.badge.startsWith('@') && item.title.includes('<query>')) {
+      const prefix = item.badge.toLowerCase() + ' ';
+      input.value = prefix;
       input.focus();
-      performSearch(bangPrefix);
+      performSearch(prefix);
       return;
     }
 
@@ -465,7 +535,7 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
         navigator.clipboard
           .readText()
           .then((text) => {
-            const trimmed = text.trim();
+            const trimmed = cleanPastedInput(text);
             if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('chrome://')) {
               chrome.runtime.sendMessage(
                 {
@@ -532,14 +602,25 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
     );
   }
 
-  let searchSeq = 0;
   // Live search via runtime messaging with sequence guard against out-of-order race conditions
   function performSearch(val: string) {
+    const trimmed = cleanPastedInput(val);
+
+    // If query is empty, show MRU open tabs from initial state!
+    if (!trimmed) {
+      if (initialState?.openTabs && initialState.openTabs.length > 0) {
+        currentResults = initialState.openTabs;
+        selectedIndex = 0;
+        renderResults();
+        return;
+      }
+    }
+
     const currentSeq = ++searchSeq;
     chrome.runtime.sendMessage(
       {
         type: 'PORTAL_SEARCH',
-        query: val,
+        query: trimmed,
         context: 'overlay',
       },
       (response) => {
@@ -561,10 +642,10 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       performSearch(input.value);
-    }, 35);
+    }, 25);
   });
 
-  // Keyboard navigation
+  // Keyboard navigation & fast secondary shortcuts
   function handleGlobalKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -593,10 +674,105 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       return;
     }
 
+    // Secondary shortcut: Alt+W closes selected tab
+    if (e.altKey && (e.key === 'w' || e.key === 'W')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        chrome.runtime.sendMessage({ type: 'PORTAL_CLOSE_TAB', tabId: current.tabId }, () => {
+          currentResults = currentResults.filter((r) => r.tabId !== current.tabId);
+          if (selectedIndex >= currentResults.length) selectedIndex = Math.max(0, currentResults.length - 1);
+          renderResults();
+          showNotice(`Closed tab: ${current.title}`);
+        });
+      }
+      return;
+    }
+
+    // Secondary shortcut: Alt+P pins selected tab
+    if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_PIN_TAB', tabId: current.tabId, pinned: !current.pinned }, (r) => {
+          if (r?.success) {
+            current.pinned = r.pinned;
+            renderResults();
+            showNotice(r.pinned ? 'Pinned tab' : 'Unpinned tab');
+          }
+        });
+      }
+      return;
+    }
+
+    // Secondary shortcut: Alt+M mutes selected tab
+    if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_MUTE_TAB', tabId: current.tabId, muted: !current.muted }, (r) => {
+          if (r?.success) {
+            current.muted = r.muted;
+            renderResults();
+            showNotice(r.muted ? 'Muted tab' : 'Unmuted tab');
+          }
+        });
+      }
+      return;
+    }
+
+    // Secondary shortcut: Alt+C copies URL of selected result
+    if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.url) {
+        navigator.clipboard.writeText(current.url).then(() => {
+          showNotice(`Copied link: ${current.url}`);
+        }).catch(() => {
+          showNotice('Could not copy link');
+        });
+      }
+      return;
+    }
+
+    // Enter execution: Primary interaction
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (currentResults[selectedIndex]) {
+
+      // Case A: A suggestion is already rendered and selected
+      if (currentResults.length > 0 && selectedIndex >= 0 && currentResults[selectedIndex]) {
         executeResult(currentResults[selectedIndex], e);
+        return;
+      }
+
+      // Case B: Suggestions haven't arrived yet, or results are empty
+      // Execute synchronous intent immediately from current input text!
+      const val = input.value.trim();
+      if (!val) {
+        // If completely empty, switch to previous tab if known
+        if (initialState?.openTabs && initialState.openTabs[0]) {
+          executeResult(initialState.openTabs[0], e);
+        }
+        return;
+      }
+
+      const intent = resolveSynchronousIntent(val, initialState?.preferences.searchEngine);
+      if (intent.targetUrl) {
+        chrome.runtime.sendMessage(
+          {
+            type: 'PORTAL_EXECUTE_ACTION',
+            item: {
+              id: `sync-intent-${Date.now()}`,
+              type: 'web',
+              title: intent.displayTitle,
+              url: intent.targetUrl,
+              score: 5000,
+            },
+            context: 'overlay',
+            modifiers: { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, alt: e.altKey },
+          },
+          () => closeOverlay(),
+        );
       }
       return;
     }
@@ -604,10 +780,9 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 
   window.addEventListener('keydown', handleGlobalKeydown, true);
 
-  // Initial load: fetch initial state from service worker
+  // Initial load: fetch MRU tabs and preferences from service worker
   chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
     if (chrome.runtime.lastError || !res) {
-      // Fallback: search immediately using current input
       performSearch(input.value || '');
       return;
     }
@@ -617,10 +792,23 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       kbdHint.textContent = res.shortcutLabel;
     }
 
-    // Trigger initial search if user hasn't typed yet, otherwise search their typed query
-    performSearch(input.value || '');
+    // Default empty state: display MRU open tabs with previously active tab at selectedIndex = 0!
+    if (!input.value.trim() && res.openTabs && res.openTabs.length > 0) {
+      currentResults = res.openTabs;
+      selectedIndex = 0;
+      renderResults();
+    } else {
+      performSearch(input.value || '');
+    }
   });
 
-  // Focus input automatically
-  setTimeout(() => input.focus(), 25);
+  // Verified robust focus handoff onto search input
+  function ensureFocus() {
+    input.focus({ preventScroll: true });
+    input.select();
+  }
+
+  requestAnimationFrame(ensureFocus);
+  setTimeout(ensureFocus, 25);
+  setTimeout(ensureFocus, 80);
 })();

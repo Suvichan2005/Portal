@@ -54,7 +54,34 @@ export function scoreStringMatch(query: string, target: string): MatchScore {
     return { score: 120 + (q.length / t.length) * 50, matched: true, isExact: false, isPrefix: false };
   }
 
+  // Multi-token match: If query contains multiple words (e.g. "flowmate portal"), ensure all tokens match
+  const tokens = q.split(/\s+/).filter((tok) => tok.length > 0);
+  if (tokens.length > 1) {
+    let allMatched = true;
+    let totalScore = 0;
+    for (const token of tokens) {
+      const subMatch = scoreStringMatch(token, t);
+      if (!subMatch.matched) {
+        allMatched = false;
+        break;
+      }
+      totalScore += subMatch.score;
+    }
+    if (allMatched) {
+      const avgScore = totalScore / tokens.length;
+      return { score: avgScore + 150, matched: true, isExact: false, isPrefix: false };
+    }
+  }
+
   return { score: 0, matched: false, isExact: false, isPrefix: false };
+}
+
+/**
+ * Checks whether all query tokens are present in target.
+ */
+export function matchQueryTokens(target: string, tokens: string[]): boolean {
+  const t = target.toLowerCase();
+  return tokens.every((token) => t.includes(token.toLowerCase()));
 }
 
 /**
