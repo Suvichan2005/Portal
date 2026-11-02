@@ -6,9 +6,9 @@
   <meta name="color-scheme" content="light dark">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-DoiiaSu7.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/briefing-service-C_CNz6TS.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-v4D3oLpL.css">
+  <script type="module" crossorigin src="/assets/newtab-Ciy_8YGl.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-CRueiOys.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-DFiYBpAZ.css">
 </head>
 <body>
   <!-- Ambient background glow -->
@@ -18,6 +18,11 @@
     <!-- Top Navigation & Controls -->
     <header class="portal-header">
       <div class="header-clock" id="headerClock">12:00</div>
+      <div class="workspace-mode-selector" id="workspaceSelector" title="Workspace Layout Preset">
+        <button class="workspace-btn" data-layout="focused" title="Focus: Minimal search & pinned shortcuts">Focus</button>
+        <button class="workspace-btn active" data-layout="daily" title="Daily: Balanced shortcuts & intelligence">Daily</button>
+        <button class="workspace-btn" data-layout="studio" title="Studio: Full modular command shell">Studio</button>
+      </div>
       <div class="header-actions">
         <button id="zenToggleBtn" class="icon-btn" title="Toggle Zen / Focus Mode (Z)" aria-label="Zen Mode">✦</button>
         <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle Theme"></button>
@@ -73,13 +78,15 @@
         <div class="shortcuts-grid" id="shortcutsGrid"></div>
       </section>
 
-      <!-- Personal Intelligence & Orchestration Section (Flowmate & OpenClaw) -->
+      <!-- Modular Command & Intelligence Section (Flowmate, Placement OS, AgenticCollab, OpenClaw) -->
       <section class="intel-surface-section" id="intelSurfaceSection">
         <div class="intel-nav">
           <div class="intel-tabs">
-            <button class="nav-tab active" data-tab="briefing" id="tabBriefingBtn">Personal Briefing</button>
+            <button class="nav-tab active" data-tab="briefing" id="tabBriefingBtn">Flowmate</button>
             <button class="nav-tab" data-tab="mail" id="tabMailBtn">Important Mail</button>
-            <button class="nav-tab" data-tab="openclaw" id="tabOpenClawBtn">OpenClaw Control</button>
+            <button class="nav-tab" data-tab="placement" id="tabPlacementBtn">Placement OS</button>
+            <button class="nav-tab" data-tab="collab" id="tabCollabBtn">AgenticCollab</button>
+            <button class="nav-tab" data-tab="openclaw" id="tabOpenClawBtn">OpenClaw</button>
           </div>
           <div class="intel-controls">
             <button class="intel-icon-btn" id="refreshIntelBtn" title="Refresh Intelligence (Async)">↻</button>
@@ -121,6 +128,60 @@
             <button class="intel-privacy-toggle" id="mailPrivacyToggle" title="Toggle mail content previews">Hide Previews</button>
           </div>
           <div class="mail-highlights-list" id="mailHighlightsList"></div>
+        </div>
+
+        <!-- Panel 3: Placement OS (Career Opportunities & Deadlines) -->
+        <div class="intel-panel hidden" id="placementPanel">
+          <div class="intel-header-row">
+            <div class="intel-source-meta" id="placementMeta">
+              <span class="source-pill" id="placementSourcePill">Placement OS</span>
+              <span class="freshness-tag" id="placementFreshnessTag">Unconfigured • Ready to connect</span>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <a href="https://placement.local" target="_blank" class="intel-privacy-toggle" id="openPlacementLink">Open Tracker ↗</a>
+            </div>
+          </div>
+          <div class="briefing-grid">
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Active Applications</h3>
+              <div id="placementApplicationsList" class="briefing-list">
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No active applications linked. Connect Placement OS or import pipeline.</div>
+              </div>
+            </div>
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Upcoming Deadlines</h3>
+              <div id="placementDeadlinesList" class="briefing-list">
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No pending interview or assessment deadlines.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 4: AgenticCollab (Cross-Agent Conversation Archive) -->
+        <div class="intel-panel hidden" id="collabPanel">
+          <div class="intel-header-row">
+            <div class="intel-source-meta" id="collabMeta">
+              <span class="source-pill" id="collabSourcePill">AgenticCollab Archive</span>
+              <span class="freshness-tag" id="collabFreshnessTag">Local Archive (Port 8765)</span>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <a href="http://localhost:8765" target="_blank" class="intel-privacy-toggle" id="openCollabLink">Open Archive ↗</a>
+            </div>
+          </div>
+          <div class="briefing-grid">
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Recent Agent Sessions</h3>
+              <div id="collabSessionsList" class="briefing-list">
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No active collaborative agent sessions recorded.</div>
+              </div>
+            </div>
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Work Handoffs</h3>
+              <div id="collabHandoffsList" class="briefing-list">
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">All tasks reconciled with primary workspace.</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Panel 3: OpenClaw Activity & Control -->
@@ -200,6 +261,14 @@
             </select>
           </div>
           <div class="setting-item">
+            <label for="workspaceSelect">Workspace Preset</label>
+            <select id="workspaceSelect">
+              <option value="focused">Focus (Minimal Search & Pinned)</option>
+              <option value="daily">Daily Driver (Balanced)</option>
+              <option value="studio">Studio (Full Modular Shell)</option>
+            </select>
+          </div>
+          <div class="setting-item">
             <label for="densitySelect">Layout Density</label>
             <select id="densitySelect">
               <option value="compact">Compact (Tighter Spacing)</option>
@@ -262,26 +331,51 @@
       </div>
     </div>
 
-    <!-- Edit / Add Shortcut Modal -->
+    <!-- Edit / Add Destination Discovery Modal -->
     <div class="settings-modal-backdrop hidden" id="editShortcutModal">
-      <div class="settings-dialog">
+      <div class="settings-dialog add-shortcut-dialog">
         <div class="settings-header">
-          <h3 id="editShortcutModalTitle">Edit Shortcut</h3>
+          <div class="add-shortcut-tabs" id="shortcutModalTabs">
+            <button class="add-tab-btn active" id="modalTabSuggested">Suggested Destinations</button>
+            <button class="add-tab-btn" id="modalTabCustom">Custom URL / Edit</button>
+          </div>
+          <h3 id="editShortcutModalTitle" style="display:none;">Add Destination</h3>
           <button class="icon-btn" id="closeEditShortcutModalBtn">&times;</button>
         </div>
-        <div class="settings-body">
-          <div class="setting-item">
-            <label for="shortcutTitleInput">Title</label>
-            <input type="text" id="shortcutTitleInput" class="portal-text-input" placeholder="e.g. GitHub" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
+        <div class="settings-body add-shortcut-body">
+          <!-- Pane 1: Custom URL Entry / Edit -->
+          <div id="paneCustomUrl" class="add-pane" style="border-bottom:1px solid var(--border-color); padding-bottom:14px; margin-bottom:14px;">
+            <div class="setting-item">
+              <label for="shortcutTitleInput">Title</label>
+              <input type="text" id="shortcutTitleInput" class="portal-text-input" placeholder="e.g. GitHub" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
+            </div>
+            <div class="setting-item">
+              <label for="shortcutUrlInput">URL</label>
+              <input type="text" id="shortcutUrlInput" class="portal-text-input" placeholder="https://github.com" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
+            </div>
+            <input type="hidden" id="shortcutIdInput" />
+            <div style="display:flex; justify-content:space-between; margin-top:12px;">
+              <button class="btn danger-btn" id="deleteShortcutBtn" style="display:none;">Delete</button>
+              <button class="btn" id="saveShortcutBtn" style="margin-left:auto;">Save Shortcut</button>
+            </div>
           </div>
-          <div class="setting-item">
-            <label for="shortcutUrlInput">URL</label>
-            <input type="text" id="shortcutUrlInput" class="portal-text-input" placeholder="https://github.com" style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:14px; margin-top:4px;" />
-          </div>
-          <input type="hidden" id="shortcutIdInput" />
-          <div style="display:flex; justify-content:space-between; margin-top:16px;">
-            <button class="btn danger-btn" id="deleteShortcutBtn" style="display:none;">Delete</button>
-            <button class="btn" id="saveShortcutBtn" style="margin-left:auto;">Save Shortcut</button>
+
+          <!-- Pane 2: Suggested Destinations (Open Tabs, Bookmarks, Frequent History, Sessions) -->
+          <div id="paneSuggestedDestinations" class="add-pane">
+            <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Suggested Destinations (1-Click Pin)</div>
+            <div class="add-search-box">
+              <input type="text" id="addShortcutSearchInput" class="portal-text-input" placeholder="Search tabs, bookmarks, or frequent destinations..." style="width:100%; padding:8px 12px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); font-size:13px; margin-bottom:8px;" />
+            </div>
+            <div class="add-filter-chips" id="addFilterChips" style="display:flex; gap:6px; margin-bottom:10px; overflow-x:auto;">
+              <button class="filter-chip active" data-filter="all">All</button>
+              <button class="filter-chip" data-filter="tabs">Open Tabs</button>
+              <button class="filter-chip" data-filter="bookmarks">Bookmarks</button>
+              <button class="filter-chip" data-filter="history">History</button>
+              <button class="filter-chip" data-filter="sessions">Saved Sessions</button>
+            </div>
+            <div class="suggested-destinations-list" id="suggestedDestinationsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+              <!-- Populated dynamically -->
+            </div>
           </div>
         </div>
       </div>
@@ -345,7 +439,7 @@
     <!-- Minimal Footer -->
     <footer class="portal-footer">
       <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page • <span class="kbd">/</span> to search</span>
-      <span class="footer-status" id="footerStatus">Portal v1.4.0</span>
+      <span class="footer-status" id="footerStatus">Portal v1.5.0</span>
     </footer>
   </div>
 

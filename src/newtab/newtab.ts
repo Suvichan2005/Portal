@@ -78,7 +78,18 @@ class PortalNewTabController {
   private copyBriefingSummaryBtn: HTMLElement | null = null;
   private currentBriefing: PersonalBriefing | null = null;
 
-  // Import Briefing Modal Elements
+  // Modular Panels
+  private tabPlacementBtn: HTMLElement | null = null;
+  private tabCollabBtn: HTMLElement | null = null;
+  private placementPanel: HTMLElement | null = null;
+  private collabPanel: HTMLElement | null = null;
+
+  // Search Sequence ID
+  private searchSeq = 0;
+
+  // Candidate Destinations for Add Shortcut Modal
+  private candidateDestinations: { title: string; url: string; source: 'tab' | 'bookmark' | 'history' | 'session' }[] = [];
+  private currentAddFilter: string = 'all';
   private importBriefingBtn: HTMLElement | null = null;
   private importBriefingModal: HTMLElement | null = null;
   private closeImportModalBtn: HTMLElement | null = null;
@@ -128,8 +139,12 @@ class PortalNewTabController {
     this.tabBriefingBtn = document.getElementById('tabBriefingBtn') as HTMLElement;
     this.tabMailBtn = document.getElementById('tabMailBtn') as HTMLElement;
     this.tabOpenClawBtn = document.getElementById('tabOpenClawBtn') as HTMLElement;
+    this.tabPlacementBtn = document.getElementById('tabPlacementBtn') as HTMLElement;
+    this.tabCollabBtn = document.getElementById('tabCollabBtn') as HTMLElement;
     this.briefingPanel = document.getElementById('briefingPanel') as HTMLElement;
     this.mailPanel = document.getElementById('mailPanel') as HTMLElement;
+    this.placementPanel = document.getElementById('placementPanel') as HTMLElement;
+    this.collabPanel = document.getElementById('collabPanel') as HTMLElement;
     this.openClawPanel = document.getElementById('openClawPanel') as HTMLElement;
     this.refreshIntelBtn = document.getElementById('refreshIntelBtn') as HTMLElement;
     this.collapseIntelBtn = document.getElementById('collapseIntelBtn') as HTMLElement;
@@ -194,6 +209,10 @@ class PortalNewTabController {
     this.applyTheme(this.prefs.theme);
     this.applyAccent(this.prefs.accentColor || 'violet');
     this.applyDensity(this.prefs.density || 'comfortable');
+    this.applyLayout(this.prefs.workspaceLayout || 'daily');
+
+    const workspaceSelect = document.getElementById('workspaceSelect') as HTMLSelectElement | null;
+    if (workspaceSelect) workspaceSelect.value = this.prefs.workspaceLayout || 'daily';
 
     const themeSelect = document.getElementById('themeSelect') as HTMLSelectElement | null;
     if (themeSelect) themeSelect.value = this.prefs.theme;
@@ -234,6 +253,15 @@ class PortalNewTabController {
 
   private applyDensity(density: string) {
     document.documentElement.setAttribute('data-density', density);
+  }
+
+  private applyLayout(layout: string) {
+    document.body.setAttribute('data-layout', layout);
+    const btns = document.querySelectorAll('#workspaceSelector .workspace-btn');
+    btns.forEach((btn) => {
+      const mode = (btn as HTMLElement).dataset.layout;
+      btn.classList.toggle('active', mode === layout);
+    });
   }
 
   private showToast(message: string) {
@@ -376,8 +404,8 @@ class PortalNewTabController {
     const themeSelect = document.getElementById('themeSelect') as HTMLSelectElement | null;
     themeSelect?.addEventListener('change', async () => {
       const theme = themeSelect.value as any;
-      this.prefs = await storage.savePreferences({ theme });
       this.applyTheme(theme);
+      this.prefs = await storage.savePreferences({ theme });
     });
 
     const searchSelect = document.getElementById('searchEngineSelect') as HTMLSelectElement | null;
@@ -423,18 +451,57 @@ class PortalNewTabController {
 
     const checkForUpdatesBtn = document.getElementById('checkForUpdatesBtn');
     checkForUpdatesBtn?.addEventListener('click', async () => {
-      this.showToast('Checking for build updates...');
+      this.showToast('Checking GitHub for updates...');
       try {
-        const res = await fetch(chrome.runtime.getURL('build-metadata.json'));
-        if (res.ok) {
-          const meta = await res.json();
-          this.showToast(`Portal v${meta.version} (${meta.commit ? meta.commit.substring(0, 7) : 'latest'})`);
-        } else {
-          this.showToast('Portal v1.4.0 is running current release');
-        }
+        let localVersion = '1.4.0';
+        let localCommit = 'HEAD';
+        try {
+          const localRes = await fetch(chrome.runtime.getURL('build-metadata.json'));
+          if (localRes.ok) {
+            const localMeta = await localRes.json();
+            localVersion = localMeta.version || localVersion;
+            localCommit = localMeta.commit || localCommit;
+          }
+        } catch {}
+
+        try {
+          const remoteRes = await fetch('https://raw.githubusercontent.com/Suvichan2005/Portal/feature/portal-next-level/public/build-metadata.json');
+          if (remoteRes.ok) {
+            const remoteMeta = await remoteRes.json();
+            if (remoteMeta.commit && remoteMeta.commit.substring(0, 7) === localCommit.substring(0, 7)) {
+              this.showToast(`Portal v${localVersion} is up to date (${localCommit.substring(0, 7)}).`);
+            } else {
+              this.showToast(`Update available: v${remoteMeta.version} (${remoteMeta.commit.substring(0, 7)}). Run .\\scripts\\sync-release.ps1`);
+            }
+            return;
+          }
+        } catch {}
+
+        this.showToast(`Portal v${localVersion} (${localCommit.substring(0, 7)}). Offline / GitHub unreachable.`);
       } catch {
         this.showToast('Portal v1.4.0 (Local release)');
       }
+    });
+
+    // Workspace Mode selector listeners
+    const workspaceSelector = document.getElementById('workspaceSelector');
+    workspaceSelector?.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.workspace-btn') as HTMLElement | null;
+      if (!btn) return;
+      const layout = (btn.dataset.layout as 'focused' | 'daily' | 'studio') || 'daily';
+      this.applyLayout(layout);
+      this.prefs = await storage.savePreferences({ workspaceLayout: layout });
+      const workspaceSelect = document.getElementById('workspaceSelect') as HTMLSelectElement | null;
+      if (workspaceSelect) workspaceSelect.value = layout;
+      this.showToast(`Switched to ${layout.charAt(0).toUpperCase() + layout.slice(1)} layout`);
+    });
+
+    const workspaceSelect = document.getElementById('workspaceSelect') as HTMLSelectElement | null;
+    workspaceSelect?.addEventListener('change', async () => {
+      const layout = (workspaceSelect.value as 'focused' | 'daily' | 'studio') || 'daily';
+      this.applyLayout(layout);
+      this.prefs = await storage.savePreferences({ workspaceLayout: layout });
+      this.showToast(`Switched to ${layout.charAt(0).toUpperCase() + layout.slice(1)} layout`);
     });
 
     // Shortcut Modal listeners
@@ -450,6 +517,62 @@ class PortalNewTabController {
     });
     editShortcutModal?.addEventListener('click', (e) => {
       if (e.target === editShortcutModal) editShortcutModal.classList.add('hidden');
+    });
+
+    // Modal Tabs: Suggested Destinations vs Custom URL
+    const modalTabSuggested = document.getElementById('modalTabSuggested');
+    const modalTabCustom = document.getElementById('modalTabCustom');
+    const paneSuggested = document.getElementById('paneSuggestedDestinations');
+    const paneCustom = document.getElementById('paneCustomUrl');
+
+    modalTabSuggested?.addEventListener('click', () => {
+      modalTabSuggested.classList.add('active');
+      modalTabCustom?.classList.remove('active');
+      paneSuggested?.classList.remove('hidden');
+      paneCustom?.classList.add('hidden');
+    });
+
+    modalTabCustom?.addEventListener('click', () => {
+      modalTabCustom.classList.add('active');
+      modalTabSuggested?.classList.remove('active');
+      paneCustom?.classList.remove('hidden');
+      paneSuggested?.classList.add('hidden');
+    });
+
+    // Add search input inside discovery modal
+    const addShortcutSearchInput = document.getElementById('addShortcutSearchInput') as HTMLInputElement | null;
+    addShortcutSearchInput?.addEventListener('input', () => {
+      this.renderCandidateDestinations(addShortcutSearchInput.value.trim());
+    });
+
+    // Filter chips inside discovery modal
+    const filterChips = document.querySelectorAll('#addFilterChips .filter-chip');
+    filterChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filterChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        this.currentAddFilter = (chip as HTMLElement).dataset.filter || 'all';
+        this.renderCandidateDestinations(addShortcutSearchInput?.value.trim() || '');
+      });
+    });
+
+    // Auto-detect title on URL typing
+    const shortcutUrlInput = document.getElementById('shortcutUrlInput') as HTMLInputElement | null;
+    shortcutUrlInput?.addEventListener('input', () => {
+      const titleInput = document.getElementById('shortcutTitleInput') as HTMLInputElement | null;
+      if (titleInput && !titleInput.value.trim()) {
+        try {
+          const raw = shortcutUrlInput.value.trim();
+          const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+          const domain = u.hostname.replace(/^www\./, '');
+          const segs = u.pathname.split('/').filter(Boolean);
+          if (domain === 'github.com' && segs.length >= 2) {
+            titleInput.value = `${segs[0]}/${segs[1]}`;
+          } else {
+            titleInput.value = domain.charAt(0).toUpperCase() + domain.slice(1);
+          }
+        } catch {}
+      }
     });
 
     const saveShortcutBtn = document.getElementById('saveShortcutBtn');
@@ -531,33 +654,21 @@ class PortalNewTabController {
       this.renderBookmarks();
     });
 
-    // Intelligence tabs
-    this.tabBriefingBtn?.addEventListener('click', () => {
-      this.tabBriefingBtn.classList.add('active');
-      this.tabMailBtn?.classList.remove('active');
-      this.tabOpenClawBtn?.classList.remove('active');
-      this.briefingPanel?.classList.remove('hidden');
-      this.mailPanel?.classList.add('hidden');
-      this.openClawPanel?.classList.add('hidden');
-    });
+    // Modular Shell Intelligence tabs
+    const switchIntelTab = (activeBtn: HTMLElement | null, activePanel: HTMLElement | null) => {
+      const allBtns = [this.tabBriefingBtn, this.tabMailBtn, this.tabPlacementBtn, this.tabCollabBtn, this.tabOpenClawBtn];
+      const allPanels = [this.briefingPanel, this.mailPanel, this.placementPanel, this.collabPanel, this.openClawPanel];
+      allBtns.forEach((b) => b?.classList.remove('active'));
+      allPanels.forEach((p) => p?.classList.add('hidden'));
+      activeBtn?.classList.add('active');
+      activePanel?.classList.remove('hidden');
+    };
 
-    this.tabMailBtn?.addEventListener('click', () => {
-      this.tabMailBtn.classList.add('active');
-      this.tabBriefingBtn?.classList.remove('active');
-      this.tabOpenClawBtn?.classList.remove('active');
-      this.mailPanel?.classList.remove('hidden');
-      this.briefingPanel?.classList.add('hidden');
-      this.openClawPanel?.classList.add('hidden');
-    });
-
-    this.tabOpenClawBtn?.addEventListener('click', () => {
-      this.tabOpenClawBtn.classList.add('active');
-      this.tabBriefingBtn?.classList.remove('active');
-      this.tabMailBtn?.classList.remove('active');
-      this.openClawPanel?.classList.remove('hidden');
-      this.briefingPanel?.classList.add('hidden');
-      this.mailPanel?.classList.add('hidden');
-    });
+    this.tabBriefingBtn?.addEventListener('click', () => switchIntelTab(this.tabBriefingBtn, this.briefingPanel));
+    this.tabMailBtn?.addEventListener('click', () => switchIntelTab(this.tabMailBtn, this.mailPanel));
+    this.tabPlacementBtn?.addEventListener('click', () => switchIntelTab(this.tabPlacementBtn, this.placementPanel));
+    this.tabCollabBtn?.addEventListener('click', () => switchIntelTab(this.tabCollabBtn, this.collabPanel));
+    this.tabOpenClawBtn?.addEventListener('click', () => switchIntelTab(this.tabOpenClawBtn, this.openClawPanel));
 
     // Refresh Intelligence button
     this.refreshIntelBtn?.addEventListener('click', () => {
@@ -666,7 +777,11 @@ class PortalNewTabController {
       return;
     }
 
-    this.currentSuggestions = await searchEngine.search(query, this.prefs, { context: 'newtab' });
+    const currentSeq = ++this.searchSeq;
+    const results = await searchEngine.search(query, this.prefs, { context: 'newtab' });
+    if (currentSeq !== this.searchSeq) return; // Discard stale asynchronous responses
+
+    this.currentSuggestions = results;
     this.selectedSuggestionIndex = this.currentSuggestions.length > 0 ? 0 : -1;
     this.renderSuggestions();
   }
@@ -961,18 +1076,14 @@ class PortalNewTabController {
       card.className = 'shortcut-card';
       card.tabIndex = 0;
 
-      if (item.isAiSuggested) {
+      if (item.isAiSuggested && item.cluster?.isAiGenerated) {
         const aiPill = document.createElement('span');
         aiPill.className = 'ai-pill';
-        if (item.cluster?.isAiGenerated) {
-          aiPill.textContent = '✦ AI';
-          aiPill.title = item.cluster.aiGeneratedReason || 'Generated by on-device model';
-        } else {
-          aiPill.textContent = 'FREQUENT';
-          aiPill.title = 'Discovered from frequent browsing history';
-        }
+        aiPill.textContent = '✦ AI';
+        aiPill.title = item.cluster.aiGeneratedReason || 'Generated by on-device model';
         card.appendChild(aiPill);
       }
+      card.title = item.cluster ? `${item.title} (${item.cluster.domain})` : item.title;
 
       // Actions (Pin / Edit / Dismiss)
       const actions = document.createElement('div');
@@ -1081,7 +1192,171 @@ class PortalNewTabController {
     });
   }
 
-  private openEditShortcutModal(id?: string, title?: string, url?: string) {
+  private async loadCandidateDestinations() {
+    this.candidateDestinations = [];
+    const seenUrls = new Set<string>();
+
+    // 1. Open tabs
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) continue;
+          if (!seenUrls.has(tab.url)) {
+            seenUrls.add(tab.url);
+            this.candidateDestinations.push({
+              title: tab.title || tab.url,
+              url: tab.url,
+              source: 'tab',
+            });
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Saved Sessions
+    try {
+      const sessions = await storage.getSavedSessions();
+      for (const s of sessions) {
+        if (s.tabs.length > 0 && !seenUrls.has(s.tabs[0].url)) {
+          seenUrls.add(s.tabs[0].url);
+          this.candidateDestinations.push({
+            title: `Workspace: ${s.name} (${s.tabCount} tabs)`,
+            url: s.tabs[0].url,
+            source: 'session',
+          });
+        }
+      }
+    } catch {}
+
+    // 3. Frequent history & intelligent clusters
+    try {
+      const intel = await storage.getIntelligence();
+      if (intel?.clusters) {
+        for (const c of intel.clusters) {
+          if (!seenUrls.has(c.primaryUrl)) {
+            seenUrls.add(c.primaryUrl);
+            this.candidateDestinations.push({
+              title: c.topic || c.title,
+              url: c.primaryUrl,
+              source: 'history',
+            });
+          }
+        }
+      }
+    } catch {}
+
+    // 4. Bookmarks
+    if (typeof chrome !== 'undefined' && chrome.bookmarks) {
+      try {
+        const bookmarks = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
+          chrome.bookmarks.getRecent(15, resolve);
+        });
+        for (const b of bookmarks) {
+          if (!b.url) continue;
+          if (!seenUrls.has(b.url)) {
+            seenUrls.add(b.url);
+            this.candidateDestinations.push({
+              title: b.title || b.url,
+              url: b.url,
+              source: 'bookmark',
+            });
+          }
+        }
+      } catch {}
+    }
+  }
+
+  private renderCandidateDestinations(filterText = '') {
+    const listEl = document.getElementById('suggestedDestinationsList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const lowerQ = filterText.toLowerCase();
+    const filtered = this.candidateDestinations.filter((item) => {
+      if (this.currentAddFilter !== 'all' && item.source !== this.currentAddFilter) return false;
+      if (!lowerQ) return true;
+      return item.title.toLowerCase().includes(lowerQ) || item.url.toLowerCase().includes(lowerQ);
+    });
+
+    if (filtered.length === 0) {
+      listEl.innerHTML =
+        '<div style="color:var(--text-muted);font-size:13px;padding:14px;text-align:center;">No matching destinations found. Use the Custom URL tab to add manually.</div>';
+      return;
+    }
+
+    for (const item of filtered.slice(0, 20)) {
+      const card = document.createElement('div');
+      card.className = 'suggested-item-card';
+
+      const info = document.createElement('div');
+      info.className = 'suggested-item-info';
+
+      const icon = document.createElement('img');
+      icon.className = 'suggested-item-icon';
+      icon.src = getFaviconUrl(item.url);
+      icon.onerror = () => {
+        icon.style.display = 'none';
+      };
+
+      const text = document.createElement('div');
+      text.className = 'suggested-item-text';
+
+      const title = document.createElement('div');
+      title.className = 'suggested-item-title';
+      title.textContent = item.title;
+
+      const urlSpan = document.createElement('div');
+      urlSpan.className = 'suggested-item-url';
+      try {
+        urlSpan.textContent = new URL(item.url).hostname;
+      } catch {
+        urlSpan.textContent = item.url;
+      }
+
+      text.appendChild(title);
+      text.appendChild(urlSpan);
+      info.appendChild(icon);
+      info.appendChild(text);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.alignItems = 'center';
+      right.style.gap = '8px';
+
+      const badge = document.createElement('span');
+      badge.className = 'source-badge';
+      badge.textContent = item.source.toUpperCase();
+
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'suggested-pin-btn';
+      pinBtn.textContent = '+ Pin';
+      pinBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await storage.pinShortcut({ title: item.title, url: item.url });
+        this.showToast(`Pinned "${item.title}" to Quick Access`);
+        const modal = document.getElementById('editShortcutModal');
+        modal?.classList.add('hidden');
+        this.renderShortcuts();
+      });
+
+      card.addEventListener('click', async () => {
+        await storage.pinShortcut({ title: item.title, url: item.url });
+        this.showToast(`Pinned "${item.title}" to Quick Access`);
+        const modal = document.getElementById('editShortcutModal');
+        modal?.classList.add('hidden');
+        this.renderShortcuts();
+      });
+
+      right.appendChild(badge);
+      right.appendChild(pinBtn);
+      card.appendChild(info);
+      card.appendChild(right);
+      listEl.appendChild(card);
+    }
+  }
+
+  private async openEditShortcutModal(id?: string, title?: string, url?: string) {
     const modal = document.getElementById('editShortcutModal');
     const modalTitle = document.getElementById('editShortcutModalTitle');
     const idInput = document.getElementById('shortcutIdInput') as HTMLInputElement | null;
@@ -1089,14 +1364,37 @@ class PortalNewTabController {
     const urlInput = document.getElementById('shortcutUrlInput') as HTMLInputElement | null;
     const deleteBtn = document.getElementById('deleteShortcutBtn');
 
-    if (modalTitle) modalTitle.textContent = id ? 'Edit Shortcut' : 'Add Shortcut';
+    const modalTabSuggested = document.getElementById('modalTabSuggested');
+    const modalTabCustom = document.getElementById('modalTabCustom');
+    const paneSuggested = document.getElementById('paneSuggestedDestinations');
+    const paneCustom = document.getElementById('paneCustomUrl');
+
     if (idInput) idInput.value = id || '';
     if (titleInput) titleInput.value = title || '';
     if (urlInput) urlInput.value = url || '';
     if (deleteBtn) deleteBtn.style.display = id ? 'inline-block' : 'none';
 
+    if (id) {
+      // Editing existing shortcut: switch to Custom / Edit tab directly
+      modalTabSuggested?.classList.remove('active');
+      modalTabCustom?.classList.add('active');
+      paneSuggested?.classList.add('hidden');
+      paneCustom?.classList.remove('hidden');
+      if (modalTitle) modalTitle.textContent = 'Edit Shortcut';
+    } else {
+      // Adding new shortcut: show both manual entry and Suggested Destinations
+      modalTabSuggested?.classList.add('active');
+      modalTabCustom?.classList.remove('active');
+      paneSuggested?.classList.remove('hidden');
+      paneCustom?.classList.remove('hidden');
+      if (modalTitle) modalTitle.textContent = 'Add Destination';
+      await this.loadCandidateDestinations();
+      this.renderCandidateDestinations();
+    }
+
     modal?.classList.remove('hidden');
-    titleInput?.focus();
+    if (id && titleInput) titleInput.focus();
+    else document.getElementById('addShortcutSearchInput')?.focus();
   }
 
   // --- Contextual Section: Open Tabs & Recently Closed & Bookmarks ---

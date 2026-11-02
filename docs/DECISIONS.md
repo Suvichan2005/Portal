@@ -176,3 +176,38 @@
   3. Provide a "Check for Updates" button in Portal preferences displaying the active build metadata.
 - **Alternative Rejected:** Uploading private builds to Chrome Web Store (requires developer fees and store review delays).
 - **Impact:** Instant, zero-cost, private cross-device release delivery between IdeaPad and ThinkBook.
+
+## DEC-029: Chrome Prompt API Output Language Safety Attestation
+- **Context:** In Chrome 134-136+ (as tested on ThinkBook), calling `LanguageModel.availability()` or `LanguageModel.create()` without explicitly attesting to expected input and output languages produces a console error: `"No output language was specified in a LanguageModel API request. An output language should be specified to ensure optimal output quality and properly attest to output safety. Please specify a supported output language code: [*]"`.
+- **Decision:** Pass `{ expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] }` to both `LanguageModel.availability(options)` and `LanguageModel.create(options)`.
+- **Alternative Rejected:** Omitting language options or suppressing the Chrome console warning.
+- **Impact:** Satisfies Chrome's strict safety and output quality checks, completely silencing the console error while ensuring optimal model execution on compatible hardware.
+
+## DEC-030: Unified Add Shortcut Modal (Direct Manual Entry + Suggested Discovery Picker)
+- **Context:** Adding shortcuts previously required either manually typing a URL or relying solely on auto-generated heuristic cards. Furthermore, previous builds hid the manual URL form when switching between discovery tabs, adding friction and breaking muscle memory.
+- **Decision:** Consolidate `#editShortcutModal` into a single, unified discovery surface:
+  1. Top tier: Direct manual entry fields (Title, URL) with auto-title inference from typed or pasted URLs and a prominent "Add Shortcut" button.
+  2. Bottom tier: Dynamic "Suggested Destinations" picker categorizing candidate links from Open Tabs, Top Bookmarks, Frequent History, and Saved Sessions with filter chips (`All`, `Tabs`, `Bookmarks`, `Frequent`, `Sessions`) and 1-click addition.
+- **Alternative Rejected:** Multi-tab wizard or modal that hides the manual URL fields.
+- **Impact:** Zero-friction manual shortcut creation (<1s) while enabling instant 1-click shortcut creation from active tabs or saved bookmarks without copying URLs.
+
+## DEC-031: Modular Personal Command Shell Architecture & Presets
+- **Context:** Portal needs to integrate Flowmate personal context, Placement OS career tracking, AgenticCollab session handoffs, and OpenClaw automation without bloating the ultra-lightweight homepage for users who want a minimal search launcher.
+- **Decision:** Implement `ModuleRegistry` with typed descriptors and three workspace layout presets:
+  1. `focused`: Minimalist launcher with search box, live clock, and personal pinned shortcuts. Briefing and modular panels hidden.
+  2. `daily`: Balanced homepage with search, quick access shortcuts, and morning briefing projection.
+  3. `studio`: Full modular command environment exposing dedicated tabs and control panels for Flowmate, Placement OS, AgenticCollab, and OpenClaw.
+- **Alternative Rejected:** Hardcoding all modules onto the homepage or building separate standalone extensions.
+- **Impact:** Portal accommodates different user working styles—from distraction-free minimalists to full-power orchestration users—with zero runtime overhead when panels are inactive.
+
+## DEC-032: Deep-Path History Clustering & Clean Title Normalization
+- **Context:** History-based shortcut clustering in earlier builds grouped visits solely by top-level domain (`chatgpt.com`, `github.com`), collapsing distinct projects, repositories, or chat sessions into generic domain buckets. Generic titles like "Sign in", "Home", or "Overview" were often selected as cluster labels.
+- **Decision:** Enhance `clustering.ts` with deep-path aware grouping:
+  - ChatGPT: `chatgpt.com/c/:id`
+  - GitHub: `github.com/:owner/:repo`
+  - Google Docs: `docs.google.com/document/d/:id`
+  - Google Sheets: `docs.google.com/spreadsheets/d/:id`
+  - YouTube: `youtube.com/watch?v=:id`
+  - Filter out generic titles (`Home`, `Sign in`, `Overview`, `Dashboard`, etc.) and fall back to segment-derived names.
+- **Alternative Rejected:** Domain-only grouping or clustering every distinct query parameter.
+- **Impact:** Suggestions represent meaningful user destinations (specific repos, conversations, and docs) rather than generic login or landing pages.

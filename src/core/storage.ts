@@ -24,6 +24,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   showImportantMail: true,
   showOpenClawStatus: true,
   hideMailPreviews: false,
+  workspaceLayout: 'daily',
+  enabledModules: ['flowmate', 'placement', 'agentic_collab', 'openclaw'],
 };
 
 const STORAGE_KEYS = {

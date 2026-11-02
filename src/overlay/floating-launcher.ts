@@ -783,7 +783,9 @@ import { cleanPastedInput } from '../core/search/url-utils';
   // Initial load: fetch MRU tabs and preferences from service worker
   chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
     if (chrome.runtime.lastError || !res) {
-      performSearch(input.value || '');
+      if (input.value.trim()) {
+        performSearch(input.value);
+      }
       return;
     }
 
@@ -792,13 +794,17 @@ import { cleanPastedInput } from '../core/search/url-utils';
       kbdHint.textContent = res.shortcutLabel;
     }
 
+    // If user already typed before initial state arrived, search their query
+    if (input.value.trim()) {
+      performSearch(input.value);
+      return;
+    }
+
     // Default empty state: display MRU open tabs with previously active tab at selectedIndex = 0!
-    if (!input.value.trim() && res.openTabs && res.openTabs.length > 0) {
+    if (res.openTabs && res.openTabs.length > 0) {
       currentResults = res.openTabs;
       selectedIndex = 0;
       renderResults();
-    } else {
-      performSearch(input.value || '');
     }
   });
 

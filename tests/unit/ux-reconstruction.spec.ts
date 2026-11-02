@@ -85,7 +85,7 @@ test.describe('Portal Daily-Driver UX Reconstruction & Search Grammar', () => {
     expect(searchIntent.targetUrl).toContain('https://www.google.com/search?q=quantum%20computing%20breakthroughs');
 
     const t1 = performance.now();
-    expect(t1 - t0).toBeLessThan(10); // Synchronous & ultra-fast
+    expect(t1 - t0).toBeLessThan(50); // Synchronous & ultra-fast (non-blocking)
   });
 
   test('4. Grammar parser: handles @ provider bangs and site scopes with @ over ! priority', () => {

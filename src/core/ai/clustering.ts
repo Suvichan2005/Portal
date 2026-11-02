@@ -21,6 +21,23 @@ const SEARCH_ENGINES = [
   'bing.com/search',
 ];
 
+const GENERIC_TITLES = new Set([
+  'home',
+  'sign in',
+  'signin',
+  'log in',
+  'login',
+  'dashboard',
+  'overview',
+  'welcome',
+  'untitled',
+  'new tab',
+  'loading',
+  'index',
+  'account',
+  'my account',
+]);
+
 export class HistoryClusterer {
   /**
    * Filters out sensitive, authentication, and transient search result URLs.
@@ -45,13 +62,59 @@ export class HistoryClusterer {
   }
 
   /**
-   * Derives a clean cluster topic name from domain and path.
+   * Generates a deep-path aware grouping key to prevent collapsing distinct
+   * conversations, documents, and repositories into generic domain buckets.
+   */
+  public getGroupKey(url: URL): string {
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    const pathParts = url.pathname.split('/').filter(Boolean);
+
+    // 1. ChatGPT conversations: chatgpt.com/c/<id> or chat.openai.com/c/<id>
+    if ((host === 'chatgpt.com' || host === 'chat.openai.com') && pathParts.length >= 2 && pathParts[0] === 'c') {
+      return `${host}/c/${pathParts[1]}`;
+    }
+
+    // 2. GitHub repositories: github.com/:owner/:repo
+    if (host === 'github.com' && pathParts.length >= 2) {
+      return `github.com/${pathParts[0]}/${pathParts[1]}`;
+    }
+
+    // 3. Google Docs & Sheets: docs.google.com/document/d/<id>
+    if (host === 'docs.google.com' && pathParts.length >= 3 && pathParts[1] === 'd') {
+      return `docs.google.com/${pathParts[0]}/d/${pathParts[2]}`;
+    }
+
+    // 4. Notion / Linear pages
+    if ((host === 'notion.so' || host.endsWith('.notion.site') || host === 'linear.app') && pathParts.length >= 1) {
+      return `${host}/${pathParts[0]}`;
+    }
+
+    // 5. Documentation paths with version/package: e.g. docs.rs, vite.dev/guide
+    if (host.includes('docs.') && pathParts.length >= 1) {
+      return `${host}/${pathParts[0]}`;
+    }
+
+    // Standard domain fallback
+    return host;
+  }
+
+  /**
+   * Derives a clean cluster topic name from domain, deep path, and sample title.
    */
   private extractTopicName(urlStr: string, sampleTitle: string): { topic: string; domain: string } {
     try {
       const u = new URL(urlStr);
       const domain = u.hostname.replace(/^www\./, '');
       const pathParts = u.pathname.split('/').filter(Boolean);
+
+      // E.g. ChatGPT conversation title
+      if ((domain === 'chatgpt.com' || domain === 'chat.openai.com') && pathParts[0] === 'c') {
+        const cleanTitle = this.cleanPageTitle(sampleTitle);
+        if (cleanTitle && !cleanTitle.toLowerCase().includes('chatgpt')) {
+          return { topic: cleanTitle, domain };
+        }
+        return { topic: 'ChatGPT Conversation', domain };
+      }
 
       // E.g. github.com/user/repo -> "Repo (GitHub)"
       if (domain === 'github.com' && pathParts.length >= 2) {
@@ -68,9 +131,9 @@ export class HistoryClusterer {
         return { topic: 'Hacker News', domain };
       }
 
-      // Clean page title or domain
-      const cleanTitle = sampleTitle.split(/[-|•–—:]/)[0].trim();
-      if (cleanTitle && cleanTitle.length > 2 && cleanTitle.length < 35) {
+      // Clean page title
+      const cleanTitle = this.cleanPageTitle(sampleTitle);
+      if (cleanTitle) {
         return { topic: cleanTitle, domain };
       }
 
@@ -81,10 +144,29 @@ export class HistoryClusterer {
   }
 
   /**
+   * Strips generic words, site suffixes, and delimiter noise from page titles.
+   */
+  private cleanPageTitle(rawTitle: string): string | null {
+    if (!rawTitle) return null;
+    const segments = rawTitle.split(/[-|•–—:]/).map((s) => s.trim()).filter(Boolean);
+    for (const segment of segments) {
+      const lower = segment.toLowerCase();
+      if (!GENERIC_TITLES.has(lower) && segment.length >= 3 && segment.length <= 40) {
+        return segment;
+      }
+    }
+    const fallback = rawTitle.trim();
+    if (fallback.length >= 3 && fallback.length <= 40 && !GENERIC_TITLES.has(fallback.toLowerCase())) {
+      return fallback;
+    }
+    return null;
+  }
+
+  /**
    * Clusters recent browser history into high-value intelligent shortcuts.
    */
   async clusterHistory(historyItems: chrome.history.HistoryItem[]): Promise<HistoryCluster[]> {
-    const domainGroups = new Map<
+    const groupMap = new Map<
       string,
       {
         primaryUrl: string;
@@ -102,22 +184,17 @@ export class HistoryClusterer {
 
       try {
         const u = new URL(item.url);
-        // Base key: domain + first path segment for doc/project sites
-        const pathSegments = u.pathname.split('/').filter(Boolean);
-        const groupKey =
-          pathSegments.length > 0 && (u.hostname === 'github.com' || u.hostname.includes('docs.'))
-            ? `${u.hostname}/${pathSegments[0]}`
-            : u.hostname;
+        const groupKey = this.getGroupKey(u);
 
         if (await storage.isDismissed(groupKey)) continue;
 
-        const existing = domainGroups.get(groupKey);
+        const existing = groupMap.get(groupKey);
         const count = item.visitCount || 1;
         const time = item.lastVisitTime || Date.now();
         const title = (item.title || u.hostname).trim();
 
         if (!existing) {
-          domainGroups.set(groupKey, {
+          groupMap.set(groupKey, {
             primaryUrl: item.url,
             title,
             visits: count,
@@ -146,17 +223,18 @@ export class HistoryClusterer {
 
     const clusters: HistoryCluster[] = [];
 
-    for (const [key, group] of domainGroups.entries()) {
-      // Must have at least 2 visits or recency within 3 days to qualify as a candidate
+    for (const [key, group] of groupMap.entries()) {
+      // Must have at least 2 visits or recency within 5 days to qualify as a candidate
       const daysAgo = (Date.now() - group.lastVisitTime) / (1000 * 60 * 60 * 24);
-      if (group.visits < 2 && daysAgo > 3) continue;
+      if (group.visits < 2 && daysAgo > 5) continue;
 
       const { topic, domain } = this.extractTopicName(group.primaryUrl, group.title);
 
-      // Score: log(visits) * 20 + recency bonus
-      const recencyBonus = Math.max(0, 100 - daysAgo * 15);
-      const frequencyBonus = Math.min(100, Math.log2(group.visits + 1) * 25);
-      const score = Math.round(recencyBonus + frequencyBonus);
+      // Score: exponential recency decay + log frequency + session depth bonus
+      const recencyScore = Math.round(100 * Math.exp(-daysAgo / 3));
+      const frequencyScore = Math.min(100, Math.round(Math.log2(group.visits + 1) * 25));
+      const depthBonus = Math.min(25, group.subUrls.length * 5);
+      const score = recencyScore + frequencyScore + depthBonus;
 
       clusters.push({
         id: `cluster-${key.replace(/[^a-zA-Z0-9]/g, '_')}`,

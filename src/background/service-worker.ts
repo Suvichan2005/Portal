@@ -6,20 +6,39 @@ import { PortalMessage, SearchResult } from '../core/types';
 import { openClawBridge } from '../core/bridge/openclaw-bridge';
 import { briefingService } from '../core/intelligence/briefing-service';
 
-console.log('[Portal Service Worker] Initializing v1.3.0...');
+console.log('[Portal Service Worker] Initializing v1.5.0...');
 
-// Track Most Recently Used (MRU) tabs across activations
+// Track Most Recently Used (MRU) tabs across activations, persisted across service worker suspension
 let mruTabHistory: number[] = [];
 
+// Restore MRU history from chrome.storage.session if available
+if (chrome.storage?.session) {
+  chrome.storage.session.get(['mruTabHistory']).then((res) => {
+    if (Array.isArray(res?.mruTabHistory)) {
+      mruTabHistory = res.mruTabHistory;
+    }
+  }).catch(() => {});
+}
+
+async function persistMru(): Promise<void> {
+  if (chrome.storage?.session) {
+    try {
+      await chrome.storage.session.set({ mruTabHistory });
+    } catch {}
+  }
+}
+
 if (chrome.tabs?.onActivated) {
-  chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
     mruTabHistory = [activeInfo.tabId, ...mruTabHistory.filter((id) => id !== activeInfo.tabId)].slice(0, 50);
+    await persistMru();
   });
 }
 
 if (chrome.tabs?.onRemoved) {
-  chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.tabs.onRemoved.addListener(async (tabId) => {
     mruTabHistory = mruTabHistory.filter((id) => id !== tabId);
+    await persistMru();
   });
 }
 
@@ -59,7 +78,13 @@ async function handleToggleLauncher(tab?: chrome.tabs.Tab) {
       await chrome.tabs.sendMessage(tab.id, { type: 'PORTAL_FOCUS_SEARCH' });
       return;
     } catch {
-      // Listener may not be active yet; fall through
+      // In extension page context, also dispatch via runtime messaging
+      try {
+        await chrome.runtime.sendMessage({ type: 'PORTAL_FOCUS_SEARCH' });
+        return;
+      } catch {
+        // Listener may not be active yet; fall through
+      }
     }
   }
 

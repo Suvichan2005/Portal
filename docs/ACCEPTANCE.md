@@ -66,3 +66,10 @@
 | **53. Honest Recommendation Categorization** | `PASSED-REAL` | Heuristic frequency/recency recommendations labeled as `FREQUENT`; zero false claims of AI model generation |
 | **54. Themes, Accents & Density Customization** | `PASSED-REAL` | Verified in Test 25 & Unit Test 8: Midnight (OLED black), 5 accents (violet, blue, emerald, amber, rose), 3 densities |
 | **55. Free Cross-Device Delivery & Atomic Marker** | `PASSED-REAL` | `scripts/sync-release.ps1` pulls releases, generates atomic `build-metadata.json`, and verifies extension reload with 0 storage loss |
+| **56. Chrome Prompt API Safety & Language Attestation** | `PASSED-UNIT` | Verified in Unit Test 5: Passes `{ expectedInputs, expectedOutputs: [{ type: 'text', languages: ['en'] }] }` to `availability()` & `create()`, eliminating ThinkBook console warnings |
+| **57. Modular Command Environment & Layout Presets** | `PASSED-REAL` | Verified in Test 27: Switcher supports `focused`, `daily`, and `studio` modes with instant DOM layout updates and storage persistence |
+| **58. Placement OS & AgenticCollab Command Panels** | `PASSED-REAL` | Verified in Test 28: Dedicated command tabs and honest unconfigured status views render without layout breakage |
+| **59. Unified Add Shortcut Modal & Candidate Discovery** | `PASSED-REAL` | Verified in Test 29: Top direct manual entry + bottom dynamic candidate destinations from Open Tabs, Bookmarks, and Sessions |
+| **60. Clean Shortcut Cards (Zero Repetitive Badges)** | `PASSED-REAL` | Verified in Test 30: Quick Access cards display clean icons and titles without annoying `FREQUENT` badges; provenance shown on hover |
+| **61. Deep-Path History Clustering & Clean Normalization** | `PASSED-UNIT` | Verified in Unit Tests 1-2: Groups by `/c/:id`, `:owner/:repo`, `/document/d/:id`, filtering generic titles (`Home`, `Sign in`) |
+| **62. Cross-Device Atomic Staging & Rollback Protection** | `PASSED-REAL` | `scripts/sync-release.ps1` provides atomic `dist.backup/` staging and automatic rollback on build failures |

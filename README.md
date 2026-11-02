@@ -4,8 +4,16 @@
 
 ![Portal New Tab](docs/screenshots/01-newtab-home.png)
 
-## Core Capabilities in v1.4.0
+## Core Capabilities in v1.5.0
 
+- **Modular Personal Command Shell & Layout Presets**:
+  - `Focus`: Minimalist launcher with search box, live clock, and personal pinned shortcuts. Distraction-free.
+  - `Daily`: Balanced homepage with search, quick access shortcuts, and morning briefing projection.
+  - `Studio`: Full modular command environment with dedicated panels for Flowmate personal context, Placement OS career milestones, AgenticCollab conversation archives, and OpenClaw automation.
+- **Chrome Prompt API Safety Attestation**: Passes `{ expectedInputs, expectedOutputs: [{ type: 'text', languages: ['en'] }] }` to Chrome's built-in Gemini Nano / Prompt API, silencing output language console warnings on modern Chrome (134-136+).
+- **Clean Quick Access & Zero Clutter**: Removed repeated `FREQUENT` badges from cards; badges are reserved strictly for genuine AI outputs (`✦ AI`), while visit counts and provenance are surfaced cleanly on hover tooltip.
+- **Unified Add Shortcut Modal & Discovery Destinations**: Direct manual entry (Title + URL) at the top with auto-title inference, paired with an interactive 1-click candidate destination picker below categorizing Open Tabs, Top Bookmarks, Frequent History, and Saved Sessions.
+- **Deep-Path History Clustering**: Recognizes deep web paths (`chatgpt.com/c/:id`, `github.com/:owner/:repo`, `docs.google.com/document/d/:id`, `youtube.com/watch?v=:id`), prevents collapsing distinct projects into domain buckets, and cleans out generic titles ("Home", "Sign in", "Overview").
 - **Direct URL & Domain Navigation on Paste**: Pasted URLs, complete protocols (`https://`, `http://`, `file:///`, `chrome://`), `localhost(:port)?`, IPv4 addresses (`127.0.0.1:port`), and valid TLD domains (`github.com`, `vite.dev`) navigate directly on Enter with score 5000 (`NAVIGATE`). Pasted URLs NEVER fall back to Google searches.
 - **Synchronous Intent Resolver (<1ms)**: Deterministic, pure evaluation of current input executed immediately on Enter even before asynchronous suggestions return.
 - **Alt+Q MRU Tab Switcher (`Alt+Q → Enter`)**: Service worker tracks real-time MRU tab activation history. Summoning the floating palette on empty query puts the previously active tab at index 0 with badge `SWITCH TAB`. Pressing `Alt+Q → Enter` instantly returns to your previous tab.
@@ -13,15 +21,14 @@
 - **Leak-Free Floating Palette Teardown**: Closing or toggling off the launcher cleanly unbinds all window keydown listeners, cancels debouncers, restores previous page focus, and unmounts the Shadow DOM container.
 - **Personal Shortcut Management & Ownership**: Click the edit button (✏️) on any pinned shortcut to rename titles, edit URLs, or delete them. Click "+ Add" in Quick Access to pin new custom destinations.
 - **Recently Closed Session Restoration**: Contextual section includes a "Recently Closed" tab showing closed tabs and full windows with 1-click restoration via `chrome.sessions.restore()`.
-- **Honest Recommendations**: Heuristic recency/frequency browsing clusters are labeled as `FREQUENT`, preserving 100% integrity without claiming to be AI model-generated.
 - **Themes, Accents & Density Customization**:
   - Themes: `system`, `dark`, `light`, and `midnight` (pure OLED black `#000000`).
   - Accents: `violet` (default), `blue` (electric blue), `emerald`, `amber`, and `rose`.
   - Density: `compact` (tighter cards & font scale), `comfortable` (balanced default), and `relaxed`.
-- **Free Cross-Device Release Delivery (`scripts/sync-release.ps1`)**: Zero-cost Git/PowerShell sync script pulling tested releases to the ThinkBook workstation, verifying build integrity, generating atomic `build-metadata.json`, and safely reloading the developer extension with 100% storage retention.
+- **Free Cross-Device Release Delivery with Rollback Protection (`scripts/sync-release.ps1`)**: Zero-cost Git/PowerShell sync script pulling tested releases to the ThinkBook workstation, verifying build integrity, generating atomic `build-metadata.json`, safely backing up `dist.backup/`, and supporting `-Rollback`.
 - **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous dashboard (**47.3ms DOM interactive, 3.79MB JS heap**, 0% idle CPU, **ZERO unsolicited network requests**).
 - **Personal Intelligence Briefing with User Import**: Displays honest unconfigured states when sources are offline; provides an **Import Briefing** workflow supporting Markdown task lists (`- [ ] task`) and JSON.
-- **Saved Browsing Session Workspaces**: Snapshot open tabs into named sessions; restore specific sessions accurately by `sessionId` without default `sessions[0]` hijacking.
+- **Saved Browsing Session Workspaces**: Snapshot open tabs into named sessions; restore specific sessions accurately by `sessionId` without default `sessions[0]` hijacking. General omni-search matches sessions by workspace name and tab titles.
 - **Audio Tab Control & Filtering**: Type `@audio` (or `@sound`, `@music`) to isolate playing media tabs. Audio tabs display a prominent `AUDIO 🔊` badge and priority boost; control them via `/switch-to-audio-tab` or `/mute-all-audio-tabs`.
 - **Unified `@` Prefix Grammar**:
   - `@gh` (GitHub), `@yt` (YouTube), `@w` (Wikipedia), `@so` (Stack Overflow), `@r` (Reddit), `@npm` (npm), `@g` (Google), `@ddg` (DuckDuckGo), `@x` (X/Twitter). Legacy `!` bangs remain supported.

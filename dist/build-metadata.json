@@ -1,8 +1,8 @@
 {
-  "version": "1.4.0",
-  "commit": "9bad77d64e2a50251c414bdb1cab8b67a4a03015",
+  "version": "1.5.0",
+  "commit": "77db8de59d01bfcb9e025c1a0ca59135e0d8aa8e",
   "branch": "feature/portal-next-level",
-  "buildTime": "2026-11-02T14:48:09.735Z",
+  "buildTime": "2026-11-02T20:32:37.544Z",
   "buildHost": "ideapad",
   "targetWorkstation": "thinkbook",
   "status": "verified"

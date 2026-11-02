@@ -73,6 +73,8 @@ export interface UserPreferences {
   showOpenClawStatus?: boolean;
   hideMailPreviews?: boolean;
   showContextualSection?: boolean;
+  workspaceLayout?: 'focused' | 'daily' | 'studio';
+  enabledModules?: string[];
 }
 
 export interface HistoryCluster {

@@ -99,13 +99,32 @@ test.describe('Source Integrity & Truthful Operation', () => {
 
   test('7. Task submission against stopped gateway is honestly rejected with clear error', async () => {
     // When port 57849 is stopped, submitTask must fail and NOT claim "Task queued"
-    const res = await openClawBridge.submitTask('Run test suite on IdeaPad', 'ideapad');
+    const originalProbe = openClawBridge.probeGateway;
+    openClawBridge.probeGateway = async () => ({
+      schemaVersion: 1,
+      gatewayState: 'stopped',
+      gatewayPort: 57849,
+      sessionState: 'stopped',
+      activeHost: 'ideapad',
+      coordinatorNode: { id: 'node-ideapad', name: 'IdeaPad', host: '127.0.0.1', status: 'offline', role: 'coordinator' },
+      workstationNode: { id: 'node-thinkbook', name: 'ThinkBook', host: '', status: 'unpaired', role: 'worker' },
+      recentJobs: [],
+      lastObservedAt: Date.now(),
+      lastCachedAt: Date.now(),
+      status: 'disconnected',
+    });
 
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('rejected');
-    expect(res.message).toContain('OpenClaw Gateway is not running');
-    expect(res.job).toBeDefined();
-    expect(res.job!.status).toBe('rejected');
+    try {
+      const res = await openClawBridge.submitTask('Run test suite on IdeaPad', 'ideapad');
+
+      expect(res.success).toBe(false);
+      expect(res.status).toBe('rejected');
+      expect(res.message).toContain('OpenClaw Gateway is not running');
+      expect(res.job).toBeDefined();
+      expect(res.job!.status).toBe('rejected');
+    } finally {
+      openClawBridge.probeGateway = originalProbe;
+    }
   });
 
   test('8. Task submission to ThinkBook while unpaired is rejected with pairing instructions', async () => {

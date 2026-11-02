@@ -5,8 +5,18 @@ export default defineConfig({
   timeout: 30000,
   retries: 0,
   workers: 1,
-  use: {
-    headless: false,
-    trace: 'off',
-  },
+  projects: [
+    {
+      name: 'unit',
+      testDir: './tests/unit',
+    },
+    {
+      name: 'e2e',
+      testDir: './tests/e2e',
+      use: {
+        headless: false,
+        trace: 'off',
+      },
+    },
+  ],
 });

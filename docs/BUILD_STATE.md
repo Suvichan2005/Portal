@@ -1,10 +1,49 @@
 # PORTAL Build State
 
-**Version:** 1.4.0  
-**Last Updated:** 2026-11-02 20:15 UTC+5:30  
-**Phase:** 10 — Daily-Driver UX Reconstruction & Free Cross-Device Delivery  
+**Version:** 1.5.0  
+**Last Updated:** 2026-11-03 01:40 UTC+5:30  
+**Phase:** 11 — Modular Personal Command Environment, Prompt API Language Fix & Discovery Destinations  
 **Branch:** feature/portal-next-level  
 **Remote:** https://github.com/Suvichan2005/Portal  
+
+## Release Overview: v1.5.0
+
+Portal v1.5.0 transforms the extension from a fast launcher into a modular personal command environment while resolving ThinkBook runtime Prompt API safety attestation issues and completely overhauling shortcut management and history clustering:
+
+### 1. Chrome Prompt API Safety & Output Language Fix
+- Added `{ expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] }` to `LanguageModel.availability()` and `LanguageModel.create()`.
+- Completely silences the ThinkBook console error: `"No output language was specified in a LanguageModel API request. An output language should be specified to ensure optimal output quality and properly attest to output safety."`
+
+### 2. Clean Quick Access & Dynamic Candidate Discovery
+- **Zero Repetitive Badges**: Removed the annoying `FREQUENT` badges from all Quick Access cards. Badges are now reserved strictly for real AI outputs (`✦ AI`), while heuristic provenance and frequency are surfaced cleanly on hover tooltip.
+- **Unified Add Shortcut Modal**: Consolidates direct manual entry (Title + URL) at the top with auto-title inference and an interactive "Suggested Destinations" discovery picker below.
+- **Instant 1-Click Candidate Adding**: Suggested destinations dynamically categorizes candidate links from Open Tabs, Top Bookmarks, Frequent History, and Saved Sessions with quick filter chips (`All`, `Tabs`, `Bookmarks`, `Frequent`, `Sessions`).
+
+### 3. Modular Personal Command Shell Architecture
+- **Typed Module Registry (`module-registry.ts`)**: Modular contract supporting Flowmate, Placement OS, AgenticCollab, and OpenClaw across three integration tiers (`A_DEEP_LINK`, `B_READ_ONLY_CONTEXT`, `C_CONTEXTUAL_ACTIONS`).
+- **Workspace Layout Presets**:
+  - `focused`: Minimalist launcher with search box, live clock, and personal pinned shortcuts. Briefing and modular panels hidden.
+  - `daily`: Balanced homepage with search, quick access shortcuts, and morning briefing projection.
+  - `studio`: Full modular command environment with dedicated tabs and panels for Flowmate, Placement OS, AgenticCollab, and OpenClaw.
+- **Placement OS & AgenticCollab Command Surfaces**: Dedicated panels providing career milestone tracking, application deadlines, conversation archives, and multi-agent handoff management with truthful unconfigured/connected state detection.
+
+### 4. Deep-Path History Clustering & Clean Normalization
+- Deep-path pattern recognition in `clustering.ts` prevents collapsing distinct ChatGPT conversations (`chatgpt.com/c/:id`), GitHub repos (`github.com/:owner/:repo`), Google Docs (`docs.google.com/document/d/:id`), and Google Sheets into generic domain buckets.
+- Aggressive generic title filtering cleans out "Home", "Sign in", "Overview", "Dashboard", replacing them with human-readable path segments.
+- Enhanced scoring with exponential recency decay, frequency logarithm, and session depth bonus.
+
+### 5. Search Sequence Reliability & General Session Discovery
+- Added `searchSeq` monotonic counter in `newtab.ts` and `floating-launcher.ts` to prevent asynchronous out-of-order suggestion overwrites.
+- General omni-search now matches saved sessions across workspace names and tab titles without requiring the literal query "session".
+- Service worker MRU tab history persisted across suspension cycles via `chrome.storage.session`.
+
+### 6. Cross-Device Atomic Delivery & Rollback
+- Enhanced `scripts/sync-release.ps1` with atomic staging via `dist.backup/`.
+- Automatic rollback to existing stable build if compilation or verification fails.
+- Manual rollback switch `.\scripts\sync-release.ps1 -Rollback`.
+- Truthful GitHub remote update check directly from Settings.
+
+---
 
 ## Release Overview: v1.4.0
 

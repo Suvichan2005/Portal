@@ -153,19 +153,26 @@ export class SearchEngine {
       }
     }
 
-    // 6. Search Saved Sessions (when query mentions session or in commands mode)
-    if (q.toLowerCase().includes('session') || filterScope === 'commands') {
+    // 6. Search Saved Sessions (in all, commands, or tabs mode)
+    if (filterScope === 'all' || filterScope === 'commands' || filterScope === 'tabs') {
       try {
         const sessions = await storage.getSavedSessions();
         for (const s of sessions) {
-          const match = scoreStringMatch(q, s.name);
-          if (match.score > 0 || q.toLowerCase().includes('session')) {
+          const nameMatch = scoreStringMatch(q, s.name);
+          let tabMatchScore = 0;
+          for (const tab of s.tabs.slice(0, 5)) {
+            const tm = scoreStringMatch(q, tab.title || tab.url);
+            if (tm.score > tabMatchScore) tabMatchScore = tm.score;
+          }
+          const bestScore = Math.max(nameMatch.score, tabMatchScore * 0.7);
+          const shouldInclude = bestScore > 0 || (q.toLowerCase().includes('session') && !nameMatch.score) || (!q && filterScope === 'commands');
+          if (shouldInclude) {
             resultsMap.set(`saved-${s.id}`, {
               id: `saved-${s.id}`,
               type: 'command',
               title: `Restore Session: ${s.name}`,
               description: `Saved workspace with ${s.tabCount} tab(s) • ${new Date(s.savedAt).toLocaleDateString()}`,
-              score: 350 + (match.score > 0 ? match.score : 40),
+              score: 350 + (bestScore > 0 ? bestScore : 40),
               commandId: 'restore-saved-session',
               sessionId: s.id, // Explicit target session ID!
               badge: 'SESSION',
@@ -289,12 +296,18 @@ export class SearchEngine {
     // 9. Search History (when in all, history, or site scope)
     if ((filterScope === 'all' || filterScope === 'history' || filterScope === 'site') && this.isExt() && chrome.history) {
       try {
+        const searchText = filterScope === 'site' && grammar.siteDomain
+          ? (q ? q : grammar.siteDomain)
+          : q;
+        const maxResults = filterScope === 'site' ? 100 : 40;
+        const startTime = Date.now() - (filterScope === 'site' ? 90 : 30) * 24 * 60 * 60 * 1000;
+
         const historyItems = await new Promise<chrome.history.HistoryItem[]>((resolve) => {
           chrome.history.search(
             {
-              text: filterScope === 'site' && grammar.siteDomain ? `${grammar.siteDomain} ${q}`.trim() : q,
-              maxResults: 40,
-              startTime: Date.now() - 30 * 24 * 60 * 60 * 1000,
+              text: searchText,
+              maxResults,
+              startTime,
             },
             resolve,
           );

@@ -24,29 +24,40 @@ export class ChromePromptApiService {
         };
       }
 
+      // Provide expectedOutputs and expectedInputs to satisfy Chrome Prompt API language attestation
+      const lmOptions = {
+        expectedInputs: [{ type: 'text', languages: ['en'] }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
+        outputLanguage: 'en',
+      };
+
       // Check availability with complete error suppression to prevent Chrome extension error logs
       let availability: string = 'unavailable';
       try {
-        availability = await lm.availability();
+        availability = await lm.availability(lmOptions);
       } catch {
-        // Feature flag gating model execution is disabled or hardware threshold unmet.
-        // Return unavailable cleanly without console noise.
-        return {
-          available: false,
-          model: 'heuristic_fallback',
-          status: 'unavailable',
-          details: 'Chrome on-device model execution flag is disabled or unsupported.',
-        };
+        try {
+          availability = await lm.availability();
+        } catch {
+          // Feature flag gating model execution is disabled or hardware threshold unmet.
+          // Return unavailable cleanly without console noise.
+          return {
+            available: false,
+            model: 'heuristic_fallback',
+            status: 'unavailable',
+            details: 'Chrome on-device model execution flag is disabled or unsupported.',
+          };
+        }
       }
 
-      if (availability === 'readily') {
+      if (availability === 'readily' || availability === 'available') {
         return {
           available: true,
           model: 'gemini_nano',
           status: 'readily',
           details: 'Chrome Gemini Nano is ready for on-device inference.',
         };
-      } else if (availability === 'after-download') {
+      } else if (availability === 'after-download' || availability === 'downloadable' || availability === 'downloading') {
         return {
           available: false,
           model: 'gemini_nano',
@@ -83,6 +94,8 @@ export class ChromePromptApiService {
 
       // Create short-lived session with structured schema and explicit output language
       session = await lm.create({
+        expectedInputs: [{ type: 'text', languages: ['en'] }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
         outputLanguage: 'en',
         initialPrompts: [
           {
@@ -162,6 +175,8 @@ export class ChromePromptApiService {
       if (!lm || typeof lm.create !== 'function') return [];
 
       session = await lm.create({
+        expectedInputs: [{ type: 'text', languages: ['en'] }],
+        expectedOutputs: [{ type: 'text', languages: ['en'] }],
         outputLanguage: 'en',
         initialPrompts: [
           {
