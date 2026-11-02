@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-C5bW7yII.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/engine-uTKKQwk7.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-DgwttK2r.css">
+  <script type="module" crossorigin src="/assets/newtab-CkP9huyg.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-CgxdpHSE.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-BnDptIa0.css">
 </head>
 <body>
   <!-- Ambient background glow -->
@@ -69,6 +69,79 @@
         <div class="shortcuts-grid" id="shortcutsGrid"></div>
       </section>
 
+      <!-- Personal Intelligence & Orchestration Section (Flowmate & OpenClaw) -->
+      <section class="intel-surface-section" id="intelSurfaceSection">
+        <div class="intel-nav">
+          <div class="intel-tabs">
+            <button class="nav-tab active" data-tab="briefing" id="tabBriefingBtn">Personal Briefing</button>
+            <button class="nav-tab" data-tab="mail" id="tabMailBtn">Important Mail</button>
+            <button class="nav-tab" data-tab="openclaw" id="tabOpenClawBtn">OpenClaw Control</button>
+          </div>
+          <div class="intel-controls">
+            <button class="intel-icon-btn" id="refreshIntelBtn" title="Refresh Intelligence (Async)">↻</button>
+            <button class="intel-icon-btn" id="collapseIntelBtn" title="Toggle Section Collapse">▾</button>
+          </div>
+        </div>
+
+        <!-- Panel 1: Personal Briefing -->
+        <div class="intel-panel" id="briefingPanel">
+          <div class="intel-header-row">
+            <div class="intel-source-meta" id="briefingMeta">
+              <span class="source-pill" id="briefingSourcePill">Flowmate Context</span>
+              <span class="freshness-tag" id="briefingFreshnessTag">Updated 35m ago</span>
+            </div>
+          </div>
+          <div class="briefing-grid">
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Top Priorities</h3>
+              <ul class="briefing-list" id="briefingPrioritiesList"></ul>
+            </div>
+            <div class="briefing-col">
+              <h3 class="briefing-subtitle">Upcoming Schedule</h3>
+              <ul class="briefing-list" id="briefingScheduleList"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 2: Important Mail Highlights -->
+        <div class="intel-panel hidden" id="mailPanel">
+          <div class="intel-header-row">
+            <div class="intel-source-meta" id="mailMeta">
+              <span class="source-pill" id="mailSourcePill">Actionable Messages</span>
+              <span class="freshness-tag" id="mailFreshnessTag">Read-only thread links</span>
+            </div>
+            <button class="intel-privacy-toggle" id="mailPrivacyToggle" title="Toggle mail content previews">Hide Previews</button>
+          </div>
+          <div class="mail-highlights-list" id="mailHighlightsList"></div>
+        </div>
+
+        <!-- Panel 3: OpenClaw Activity & Control -->
+        <div class="intel-panel hidden" id="openClawPanel">
+          <div class="openclaw-status-card">
+            <div class="openclaw-gateway-indicator" id="openclawGatewayIndicator">
+              <span class="status-dot stopped" id="openclawStatusDot"></span>
+              <span class="gateway-label" id="openclawGatewayLabel">Gateway: Standby (Port 57849)</span>
+              <a href="http://127.0.0.1:57849/" target="_blank" class="open-gateway-link">Open Dashboard ↗</a>
+            </div>
+            <div class="openclaw-nodes-row" id="openclawNodesRow"></div>
+          </div>
+
+          <div class="openclaw-jobs-section">
+            <h3 class="briefing-subtitle">Recent Automation Runs</h3>
+            <div class="openclaw-jobs-list" id="openclawJobsList"></div>
+          </div>
+
+          <form class="openclaw-task-form" id="openclawTaskForm">
+            <input type="text" id="openclawTaskInput" class="openclaw-task-input" placeholder="Submit bounded task to OpenClaw..." autocomplete="off">
+            <select id="openclawHostSelect" class="openclaw-host-select">
+              <option value="ideapad">Host: IdeaPad (Local)</option>
+              <option value="thinkbook">Host: ThinkBook (Remote)</option>
+            </select>
+            <button type="submit" class="btn openclaw-submit-btn">Dispatch ↵</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Contextual Section (Open Tabs & Bookmark Collections) -->
       <section class="contextual-section" id="contextualSection">
         <div class="tabs-nav">
@@ -111,6 +184,21 @@
             </select>
           </div>
           <div class="setting-item">
+            <label for="toggleIntelBriefing">Personal Intelligence Surface</label>
+            <div class="setting-desc">Display Flowmate context, morning priorities, and schedule preview.</div>
+            <input type="checkbox" id="toggleIntelBriefing" checked style="margin-top:6px;">
+          </div>
+          <div class="setting-item">
+            <label for="toggleOpenClaw">OpenClaw Activity & Gateway Bridge</label>
+            <div class="setting-desc">Display Gateway status and local/remote node orchestrator.</div>
+            <input type="checkbox" id="toggleOpenClaw" checked style="margin-top:6px;">
+          </div>
+          <div class="setting-item">
+            <label for="toggleClipboardDetect">Auto-detect Clipboard URLs on Focus</label>
+            <div class="setting-desc">Disabled by default for strict privacy. When enabled, checks clipboard for links when tab is focused.</div>
+            <input type="checkbox" id="toggleClipboardDetect" style="margin-top:6px;">
+          </div>
+          <div class="setting-item">
             <label>Search Bangs & Filter Modifiers</label>
             <div class="setting-desc">
               Type <span class="kbd">!gh</span> (GitHub), <span class="kbd">!yt</span> (YouTube), <span class="kbd">!w</span> (Wikipedia), <span class="kbd">!so</span> (Stack Overflow), or <span class="kbd">!npm</span>.<br>
@@ -142,7 +230,7 @@
     <!-- Minimal Footer -->
     <footer class="portal-footer">
       <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page</span>
-      <span class="footer-status" id="footerStatus">Portal v1.1.0</span>
+      <span class="footer-status" id="footerStatus">Portal v1.3.0</span>
     </footer>
   </div>
 

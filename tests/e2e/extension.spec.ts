@@ -257,16 +257,16 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const host = page.locator('#portal-floating-launcher-root');
     await expect(host).toBeVisible({ timeout: 5000 });
 
-    // Search for restore closed tab
+    // Search for duplicate tab command which requires background tabs authority
     const input = host.locator('input');
-    await input.fill('restore');
+    await input.fill('duplicate');
 
-    const cmdItem = host.locator('.result-item', { hasText: 'Restore Closed Tab' });
+    const cmdItem = host.locator('.result-item', { hasText: 'Duplicate Current Tab' });
     await expect(cmdItem).toBeVisible({ timeout: 4000 });
 
-    // Clicking executes command in service worker without error
+    // Clicking executes command in service worker without error and dismisses overlay
     await cmdItem.click();
-    await expect(host).toBeHidden({ timeout: 2000 });
+    await expect(host).toBeHidden({ timeout: 5000 });
   });
 
   test('11. Quick Search Bangs (!gh, !yt, !w) generate instant direct search actions', async () => {
@@ -349,5 +349,118 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     // Verify feedback toast appears
     const toast = page.locator('#portalToast');
     await expect(toast).toBeVisible({ timeout: 3000 });
+  });
+
+  test('15. Personal Intelligence Briefing renders top priorities, schedule, and freshness badge', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const intelSection = page.locator('#intelSurfaceSection');
+    await expect(intelSection).toBeVisible({ timeout: 5000 });
+
+    const sourcePill = page.locator('#briefingSourcePill');
+    await expect(sourcePill).toContainText('Flowmate Context');
+
+    const priorities = page.locator('#briefingPrioritiesList .briefing-item');
+    await expect(priorities.first()).toBeVisible({ timeout: 3000 });
+    expect(await priorities.count()).toBeGreaterThan(0);
+
+    const schedule = page.locator('#briefingScheduleList .briefing-item');
+    await expect(schedule.first()).toBeVisible({ timeout: 3000 });
+    expect(await schedule.count()).toBeGreaterThan(0);
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/11-personal-briefing.png` });
+  });
+
+  test('16. Important Mail Highlights with Privacy Mode toggle', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Switch to Important Mail tab
+    const mailTabBtn = page.locator('#tabMailBtn');
+    await expect(mailTabBtn).toBeVisible({ timeout: 3000 });
+    await mailTabBtn.click();
+
+    const mailPanel = page.locator('#mailPanel');
+    await expect(mailPanel).toBeVisible({ timeout: 3000 });
+
+    const mailCards = page.locator('.mail-item-card');
+    await expect(mailCards.first()).toBeVisible({ timeout: 3000 });
+    expect(await mailCards.count()).toBeGreaterThan(0);
+
+    // Verify Open Thread link points to mail.google.com
+    const openLink = mailCards.first().locator('.mail-open-btn');
+    const href = await openLink.getAttribute('href');
+    expect(href).toContain('mail.google.com');
+
+    // Test privacy toggle: hide previews
+    const privacyToggle = page.locator('#mailPrivacyToggle');
+    await privacyToggle.click();
+    await expect(mailPanel).toHaveClass(/hide-previews/);
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/12-important-mail.png` });
+  });
+
+  test('17. OpenClaw Activity & Control Center with Bounded Task Submission', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Switch to OpenClaw tab
+    const openClawTabBtn = page.locator('#tabOpenClawBtn');
+    await expect(openClawTabBtn).toBeVisible({ timeout: 3000 });
+    await openClawTabBtn.click();
+
+    const openClawPanel = page.locator('#openClawPanel');
+    await expect(openClawPanel).toBeVisible({ timeout: 3000 });
+
+    // Verify Gateway port 57849 indicator
+    const gatewayLabel = page.locator('#openclawGatewayLabel');
+    await expect(gatewayLabel).toContainText('57849');
+
+    // Verify Node pills (IdeaPad and ThinkBook)
+    const nodes = page.locator('.node-pill');
+    await expect(nodes.first()).toBeVisible({ timeout: 3000 });
+    expect(await nodes.count()).toBeGreaterThanOrEqual(2);
+
+    // Submit a bounded task
+    const taskInput = page.locator('#openclawTaskInput');
+    await taskInput.fill('Run Playwright test suite check');
+
+    const submitBtn = page.locator('#openclawTaskForm button');
+    await submitBtn.click();
+
+    // Verify feedback toast appears confirming task was queued
+    const toast = page.locator('#portalToast');
+    await expect(toast).toBeVisible({ timeout: 3000 });
+    await expect(toast).toContainText('Task queued');
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/13-openclaw-control.png` });
+  });
+
+  test('18. Floating Launcher action acknowledgement and safe notice display', async () => {
+    const page = await context.newPage();
+    await page.goto('https://example.com');
+
+    await injectOverlay(page);
+    const host = page.locator('#portal-floating-launcher-root');
+    await expect(host).toBeVisible({ timeout: 5000 });
+
+    const input = host.locator('input');
+    await input.fill('zen');
+
+    const zenItem = host.locator('.result-item', { hasText: 'Toggle Zen / Focus Mode' });
+    await expect(zenItem).toBeVisible({ timeout: 4000 });
+    await zenItem.click();
+
+    // Verify notice bar appears inside overlay giving acknowledgement before closing
+    const notice = host.locator('#noticeBar');
+    await expect(notice).toBeVisible({ timeout: 2000 });
+    await expect(notice).toContainText('Zen mode');
+
+    // Overlay closes after acknowledgement
+    await expect(host).toBeHidden({ timeout: 3000 });
   });
 });

@@ -3,8 +3,10 @@ import { storage } from '../core/storage';
 import { searchEngine } from '../core/search/engine';
 import { COMMANDS } from '../core/commands/registry';
 import { PortalMessage, SearchResult } from '../core/types';
+import { openClawBridge } from '../core/bridge/openclaw-bridge';
+import { briefingService } from '../core/intelligence/briefing-service';
 
-console.log('[Portal Service Worker] Initializing v1.1.0...');
+console.log('[Portal Service Worker] Initializing v1.3.0...');
 
 // 1. Installation & Setup
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -231,6 +233,38 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
     case 'PORTAL_DISMISS_SHORTCUT': {
       const updated = await storage.dismissItem(message.urlOrDomain);
       return { success: true, dismissed: updated };
+    }
+
+    case 'PORTAL_GET_INTELLIGENCE_SNAPSHOT': {
+      const [briefing, mailSnapshot, openClawStatus] = await Promise.all([
+        briefingService.getBriefing(),
+        briefingService.getMailSnapshot(),
+        openClawBridge.getStatus(),
+      ]);
+      return { success: true, briefing, mailSnapshot, openClawStatus };
+    }
+
+    case 'PORTAL_REFRESH_INTELLIGENCE': {
+      const [refreshed, openClawStatus] = await Promise.all([
+        briefingService.refreshAll(),
+        openClawBridge.getStatus(),
+      ]);
+      return {
+        success: true,
+        briefing: refreshed.briefing,
+        mailSnapshot: refreshed.mailSnapshot,
+        openClawStatus,
+      };
+    }
+
+    case 'PORTAL_GET_OPENCLAW_STATUS': {
+      const openClawStatus = await openClawBridge.getStatus();
+      return { success: true, openClawStatus };
+    }
+
+    case 'PORTAL_SUBMIT_OPENCLAW_ACTION': {
+      const res = await openClawBridge.submitTask(message.action, (message.host as any) || 'ideapad');
+      return res;
     }
 
     default:

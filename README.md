@@ -1,45 +1,48 @@
 # Portal ✦ Intelligent Chrome Homepage & Browser Launcher
 
-> An intelligent, beautiful, ultra-lightweight Chrome homepage and floating command palette designed to elevate daily browsing without slowing down your browser.
+> An intelligent, beautiful, ultra-lightweight Chrome homepage and floating command palette designed to elevate daily browsing, surface Flowmate personal context, and orchestrate OpenClaw automation without slowing down your browser.
 
 ![Portal New Tab](docs/screenshots/01-newtab-home.png)
 
-## Core Capabilities
+## Core Capabilities in v1.3.0
 
-- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (<42ms DOM interactive, ~3.4MB JS heap).
-- **Floating Command Palette**: Press `Alt+Q` on any webpage to instantly summon a floating launcher over the active tab for seamless tab switching, bookmark lookup, web search, and browser actions.
+- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (**58ms DOM interactive, 3.22MB JS heap**, 0% idle CPU).
+- **Floating Command Palette (`Alt+Q`)**: Press `Alt+Q` on any webpage to instantly summon a floating launcher over the active tab for seamless tab switching, bookmark lookup, web search, and browser actions.
 - **Context-Preserving Search & Navigation**: Searches and links triggered from the floating launcher automatically open in a **new tab**, never replacing or interrupting your current webpage.
+- **Personal Intelligence Briefing**: Surfaces morning priorities, commitments, and schedule previews backed by local projections from Flowmate, tagged by source with real freshness indicators.
+- **Important Mail Highlights**: Clean, action-oriented thread highlights with read-only direct Gmail links (`https://mail.google.com/mail/u/0/#inbox/<threadId>`) and an instant **Privacy Preview toggle** to mask snippets when screen sharing.
+- **OpenClaw Activity & Control Center**: Probes local OpenClaw Gateway on loopback (`127.0.0.1:57849`), displays coordinator (IdeaPad) and workstation (ThinkBook) node states, and provides bounded task submission with toast confirmation.
 - **Quick Search Bangs**: Instant DuckDuckGo-style bangs (`!gh` GitHub, `!yt` YouTube, `!w` Wikipedia, `!so` Stack Overflow, `!r` Reddit, `!npm` npm, `!m` Google Maps, `!g` Google, `!x` Twitter, `!ddg` DuckDuckGo) for direct routing.
 - **Category Filter Modifiers**: Filter instantly with prefix keys:
   - `@` strictly isolates open tabs (`@github`, `@portal`)
   - `#` or `*` strictly isolates bookmarks (`#dev`, `*docs`)
-  - `/` strictly isolates browser commands (`/sleep`, `/theme`)
-- **Smart Clipboard URL Chip**: Automatically detects links copied in your clipboard on focus and surfaces a 1-click / Enter chip to navigate without pasting.
-- **Tab Memory Suspender**: Built-in `/sleep` command calls native `chrome.tabs.discard()` on inactive background tabs, reclaiming system RAM while preserving open tabs.
-- **Zen / Focus Mode**: Press `Z` or click the Zen button to toggle an ultra-minimalist view that hides non-essential widgets and presents a tranquil distraction-free dashboard.
+  - `/` strictly isolates browser commands (`/sleep`, `/theme`, `/clip`)
+- **Safe Action Acknowledgement**: In-palette notice bar gives immediate visual acknowledgement when commands execute (e.g. "Zen mode enabled", "Tab duplicated") and remains open on errors so you are never left guessing.
+- **User-Initiated Clipboard Privacy**: `/clip` command opens copied URLs safely on demand without intrusive background clipboard snooping.
+- **Inactivity-Gated Tab Memory Suspender**: `/sleep` discards non-active background tabs older than 10 minutes via `chrome.tabs.discard()`; `/sleep-all` forces immediate memory reclamation.
+- **Zen / Focus Mode (`Z`)**: Press `Z` or click the Zen button to toggle an ultra-minimalist view that hides non-essential widgets and presents a tranquil distraction-free dashboard.
 - **Harmonious Omnibox**: Preserves native Chrome address bar behavior while offering an optional `p <query>` omnibox shortcut.
 - **Dual-Tier Local Intelligence**:
   - **Tier 1 (Deterministic Clustering)**: Automatically discovers high-frequency destinations and recurring browsing clusters using frequency-recency half-life decay.
   - **Tier 2 (Chrome Prompt API / Gemini Nano)**: Integrates Chrome's on-device `LanguageModel` with structured JSON constraints when supported on the device.
 - **Zero Telemetry & Strict Privacy**: 100% local-first. Zero external API calls, zero analytics, zero remote servers.
-- **Smart Deduplication & Tab Switching**: Seamlessly switches to already open tabs across multiple windows instead of spawning duplicate tabs.
 - **Interactive Bookmarks Tree**: Explore your bookmark hierarchy with expandable/collapsible folder navigation right from the homepage contextual panel.
-- **Toast Feedback System**: Real-time ambient visual feedback confirming actions such as pinning shortcuts, toggling themes, or sleeping background tabs.
 
 ---
 
 ## Performance Against Native Chrome Baseline
 
-Measured on a Lenovo IdeaPad (Windows 11 Pro, Chrome 156):
+Measured on a Lenovo IdeaPad (Windows 11, Chrome 156):
 
-| Metric | Native Chrome NTP Baseline | Portal Target Budget | Portal Measured Result |
-|---|---|---|---|
-| **DOM Interactive** | 18.30 ms | < 100 ms | **41.70 ms** |
-| **DOM Content Loaded** | 18.40 ms | < 120 ms | **95.60 ms** |
-| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.43 MB** |
-| **Extension Bundle Size** | N/A | < 250 KB | **68.2 KB** (total dist) |
-| **Summon Latency (Overlay)** | N/A | < 200 ms | **128.84 ms** |
-| **Idle Service Worker CPU** | 0% | 0% | **0%** (Suspends cleanly) |
+| Metric | Native Chrome NTP Baseline | Portal Target Budget | Portal v1.3.0 Result | Status |
+|---|---|---|---|---|
+| **DOM Interactive** | 18.30 ms | < 100 ms | **58.00 ms** | **PASSED** |
+| **DOM Content Loaded** | 18.40 ms | < 120 ms | **83.30 ms** | **PASSED** |
+| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.22 MB** | **EXCEEDED** (< 1/8 native) |
+| **Summon Latency (Overlay)** | N/A | < 200 ms | **103.27 ms** | **PASSED** |
+| **Keypress Latency** | < 16 ms | < 60 ms | **47.84 ms** | **PASSED** |
+| **Extension Bundle Size** | N/A | < 250 KB | **92.4 KB** (total dist) | **EXCEEDED** |
+| **Idle Service Worker CPU** | 0% | 0% | **0%** | **PASSED** (Suspends cleanly) |
 
 See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for full benchmark methodology.
 
@@ -65,14 +68,18 @@ npm run typecheck
 # Build production extension (dist/)
 npm run build
 
-# Run automated Playwright E2E browser test suite (14 tests)
+# Run automated Playwright E2E browser test suite (18 tests)
 npm test
+
+# Run real browser performance benchmark
+npm run benchmark
 ```
 
 ---
 
 ## Architecture & Verification
-- [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md) — Implementation status, audited fixes, and next-level features.
-- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 31-item verification matrix across real browser workflows.
+- [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md) — Implementation status, audited fixes, and v1.3.0 capabilities.
+- [`docs/DEVICE_TOPOLOGY.md`](docs/DEVICE_TOPOLOGY.md) — Multi-device orchestration topology, IdeaPad coordinator, ThinkBook worker node, security boundaries, and execution classes.
+- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 36-item verification matrix across real browser workflows.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural decision log and trade-off rationale.
 - [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — Detailed latency, memory, and startup measurements.

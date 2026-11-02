@@ -278,6 +278,7 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
   searchRow.appendChild(kbdHint);
 
   const noticeBar = document.createElement('div');
+  noticeBar.id = 'noticeBar';
   noticeBar.className = 'notice-bar';
 
   const contentArea = document.createElement('div');
@@ -458,13 +459,45 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       return;
     }
 
+    // User-initiated clipboard navigation
+    if (item.commandId === 'open-clipboard-url') {
+      if (navigator.clipboard?.readText) {
+        navigator.clipboard
+          .readText()
+          .then((text) => {
+            const trimmed = text.trim();
+            if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('chrome://')) {
+              chrome.runtime.sendMessage(
+                {
+                  type: 'PORTAL_EXECUTE_ACTION',
+                  item: { ...item, url: trimmed, type: 'web' },
+                  context: 'overlay',
+                },
+                () => {
+                  showNotice(`Opening ${trimmed}`);
+                  setTimeout(closeOverlay, 400);
+                },
+              );
+            } else {
+              showNotice('Clipboard does not contain a valid URL');
+            }
+          })
+          .catch(() => {
+            showNotice('Clipboard read permission was not granted');
+          });
+      } else {
+        showNotice('Clipboard API not available');
+      }
+      return;
+    }
+
     const modifiers = {
       shift: e?.shiftKey,
       alt: e?.altKey,
       ctrl: e?.ctrlKey || (e as any)?.metaKey,
     };
 
-    // Send execution request to service worker first
+    // Send execution request to service worker and await verified response
     chrome.runtime.sendMessage(
       {
         type: 'PORTAL_EXECUTE_ACTION',
@@ -474,15 +507,29 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
       },
       (response) => {
         if (chrome.runtime.lastError) {
-          console.warn('[Portal Overlay] Action error:', chrome.runtime.lastError.message);
-        } else if (response && !response.success && response.message) {
-          console.warn('[Portal Overlay] Action failure:', response.message);
+          showNotice(`Error: ${chrome.runtime.lastError.message}`);
+          return;
+        }
+
+        if (!response || !response.success) {
+          showNotice(response?.message || 'Action could not be executed');
+          return;
+        }
+
+        // On verified success:
+        if (item.type === 'command') {
+          if (response.message) {
+            showNotice(response.message);
+            setTimeout(closeOverlay, 850);
+          } else {
+            closeOverlay();
+          }
+        } else {
+          // Tab switch or new tab creation
+          closeOverlay();
         }
       },
     );
-
-    // Close overlay on next tick so DOM click events settle cleanly
-    setTimeout(closeOverlay, 25);
   }
 
   let searchSeq = 0;
@@ -503,32 +550,6 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
         }
         if (response && response.results) {
           currentResults = response.results;
-
-          // If query is empty, offer copied clipboard link at the top if present
-          if (!val && navigator.clipboard?.readText) {
-            navigator.clipboard
-              .readText()
-              .then((clipText) => {
-                const trimmed = clipText.trim();
-                if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                  if (!currentResults.some((r) => r.url === trimmed)) {
-                    const clipItem: SearchResult = {
-                      id: 'clipboard-link',
-                      type: 'web',
-                      title: 'Open link from clipboard',
-                      url: trimmed,
-                      description: trimmed,
-                      badge: 'CLIPBOARD',
-                      score: 5000,
-                    };
-                    currentResults = [clipItem, ...currentResults];
-                    renderResults();
-                  }
-                }
-              })
-              .catch(() => {});
-          }
-
           selectedIndex = 0;
           renderResults();
         }

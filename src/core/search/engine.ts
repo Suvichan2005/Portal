@@ -157,7 +157,13 @@ export class SearchEngine {
         }
 
         const bestScore = Math.max(titleMatch.score, descMatch.score * 0.7, keywordScore);
-        const isPriorityCmd = cmd.id === 'sleep-inactive-tabs' || cmd.id === 'restore-closed-tab' || cmd.id === 'close-duplicates' || cmd.id === 'toggle-zen-mode';
+        const isPriorityCmd =
+          cmd.id === 'sleep-inactive-tabs' ||
+          cmd.id === 'restore-closed-tab' ||
+          cmd.id === 'close-duplicates' ||
+          cmd.id === 'toggle-zen-mode' ||
+          cmd.id === 'open-clipboard-url' ||
+          cmd.id === 'openclaw-status';
         const isDefaultCmd = !q && isPriorityCmd;
         if (bestScore > 100 || (filterMode === 'commands' && !q) || isDefaultCmd) {
           const priorityBonus = isPriorityCmd && !q ? 80 : 0;

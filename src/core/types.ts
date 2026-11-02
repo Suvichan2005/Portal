@@ -54,6 +54,12 @@ export interface UserPreferences {
   showIntelligentShortcuts: boolean;
   reducedMotion: boolean;
   density: 'compact' | 'comfortable';
+  zenMode?: boolean;
+  autoDetectClipboardUrl?: boolean;
+  showIntelligenceBriefing?: boolean;
+  showImportantMail?: boolean;
+  showOpenClawStatus?: boolean;
+  hideMailPreviews?: boolean;
 }
 
 export interface HistoryCluster {
@@ -93,6 +99,72 @@ export interface InitialLauncherState {
   modelStatus: string;
 }
 
+export interface BriefingItem {
+  id: string;
+  title: string;
+  summary: string;
+  source: 'flowmate' | 'openclaw' | 'google_tasks' | 'calendar' | 'system';
+  sourceUrl?: string;
+  observedAt: number;
+  dueTime?: string;
+  actionRequired: boolean;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface PersonalBriefing {
+  generatedAt: number;
+  sourceIdentity: string;
+  status: 'fresh' | 'stale' | 'offline_cached' | 'disconnected';
+  topPriorities: BriefingItem[];
+  upcomingCommitments: BriefingItem[];
+  followUps: BriefingItem[];
+}
+
+export interface ImportantMailItem {
+  id: string;
+  threadId: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  receivedAt: number;
+  threadUrl: string;
+  urgencyReason: string;
+  actionRequired: boolean;
+  category: 'recruiter' | 'deadline' | 'priority' | 'update';
+}
+
+export interface ImportantMailSnapshot {
+  lastChecked: number;
+  status: 'connected' | 'disconnected' | 'cached' | 'unauthorized';
+  items: ImportantMailItem[];
+}
+
+export interface OpenClawJobSummary {
+  id: string;
+  task: string;
+  host: 'ideapad' | 'thinkbook' | 'sandbox' | 'unknown';
+  status: 'running' | 'queued' | 'completed' | 'failed' | 'requires_approval';
+  startedAt: number;
+  completedAt?: number;
+  resultSummary?: string;
+}
+
+export interface OpenClawSystemStatus {
+  gatewayOnline: boolean;
+  gatewayPort: number;
+  agentId: string;
+  sessionState: 'ready' | 'running' | 'stopped' | 'unconfigured';
+  activeHost: 'ideapad' | 'thinkbook';
+  pairedNodes: {
+    name: string;
+    host: string;
+    status: 'connected' | 'pairing_available' | 'offline';
+    isCoordinator: boolean;
+  }[];
+  recentJobs: OpenClawJobSummary[];
+  lastConfirmedUpdate: number;
+}
+
 export type PortalMessage =
   | { type: 'PORTAL_SEARCH'; query: string; context: 'overlay' | 'newtab' }
   | {
@@ -105,4 +177,8 @@ export type PortalMessage =
   | { type: 'PORTAL_CLOSE_TAB'; tabId: number }
   | { type: 'PORTAL_SWITCH_TAB'; tabId: number; windowId?: number }
   | { type: 'PORTAL_DISMISS_SHORTCUT'; urlOrDomain: string }
-  | { type: 'PORTAL_PIN_SHORTCUT'; shortcut: Omit<PinnedShortcut, 'addedAt'> };
+  | { type: 'PORTAL_PIN_SHORTCUT'; shortcut: Omit<PinnedShortcut, 'addedAt'> }
+  | { type: 'PORTAL_GET_INTELLIGENCE_SNAPSHOT' }
+  | { type: 'PORTAL_REFRESH_INTELLIGENCE' }
+  | { type: 'PORTAL_GET_OPENCLAW_STATUS' }
+  | { type: 'PORTAL_SUBMIT_OPENCLAW_ACTION'; action: string; host?: string };

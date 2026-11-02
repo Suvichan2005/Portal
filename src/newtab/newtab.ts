@@ -2,9 +2,19 @@ import { searchEngine } from '../core/search/engine';
 import { storage } from '../core/storage';
 import { intelligenceManager } from '../core/ai/intelligence';
 import { promptApi } from '../core/ai/prompt-api';
-import { SearchResult, PinnedShortcut, HistoryCluster, UserPreferences } from '../core/types';
+import {
+  SearchResult,
+  PinnedShortcut,
+  HistoryCluster,
+  UserPreferences,
+  PersonalBriefing,
+  ImportantMailSnapshot,
+  OpenClawSystemStatus,
+} from '../core/types';
 import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 import { COMMANDS } from '../core/commands/registry';
+import { briefingService } from '../core/intelligence/briefing-service';
+import { openClawBridge } from '../core/bridge/openclaw-bridge';
 
 class PortalNewTabController {
   private prefs: UserPreferences = {
@@ -32,6 +42,29 @@ class PortalNewTabController {
   private selectedSuggestionIndex = -1;
   private debounceTimer: any = null;
 
+  // Intelligence Surface Elements
+  private intelSection!: HTMLElement;
+  private tabBriefingBtn!: HTMLElement;
+  private tabMailBtn!: HTMLElement;
+  private tabOpenClawBtn!: HTMLElement;
+  private briefingPanel!: HTMLElement;
+  private mailPanel!: HTMLElement;
+  private openClawPanel!: HTMLElement;
+  private refreshIntelBtn!: HTMLElement;
+  private collapseIntelBtn!: HTMLElement;
+  private briefingPrioritiesList!: HTMLElement;
+  private briefingScheduleList!: HTMLElement;
+  private briefingFreshnessTag!: HTMLElement;
+  private mailHighlightsList!: HTMLElement;
+  private mailPrivacyToggle!: HTMLElement;
+  private openclawStatusDot!: HTMLElement;
+  private openclawGatewayLabel!: HTMLElement;
+  private openclawNodesRow!: HTMLElement;
+  private openclawJobsList!: HTMLElement;
+  private openclawTaskForm!: HTMLFormElement;
+  private openclawTaskInput!: HTMLInputElement;
+  private openclawHostSelect!: HTMLSelectElement;
+
   async init() {
     this.bindDomElements();
     this.setupIcons();
@@ -39,18 +72,21 @@ class PortalNewTabController {
     this.setupEventListeners();
     await this.loadPreferences();
 
-    // Check Zen Mode state from local storage
-    if (localStorage.getItem('portal_zen_mode') === 'true') {
+    // Check Zen Mode state from user preferences or storage
+    if (this.prefs.zenMode || localStorage.getItem('portal_zen_mode') === 'true') {
       document.body.classList.add('zen-mode');
     }
 
-    // Check clipboard for copied URLs
-    this.checkClipboardForUrl().catch(() => {});
+    // Only auto-probe clipboard if user explicitly enabled the privacy setting
+    if (this.prefs.autoDetectClipboardUrl) {
+      this.checkClipboardForUrl().catch(() => {});
+    }
 
     // Fast parallel loads with error isolation
     this.renderShortcuts().catch(() => {});
     this.renderOpenTabs().catch(() => {});
     this.renderBookmarks().catch(() => {});
+    this.loadIntelligenceSurfaces().catch(() => {});
     this.updateAiStatusBadge().catch(() => {});
   }
 
@@ -64,6 +100,29 @@ class PortalNewTabController {
     this.toastEl = document.getElementById('portalToast') as HTMLElement;
     this.clipboardChip = document.getElementById('clipboardChip') as HTMLElement;
     this.clipboardChipUrl = document.getElementById('clipboardChipUrl') as HTMLElement;
+
+    // Intelligence surface elements
+    this.intelSection = document.getElementById('intelSurfaceSection') as HTMLElement;
+    this.tabBriefingBtn = document.getElementById('tabBriefingBtn') as HTMLElement;
+    this.tabMailBtn = document.getElementById('tabMailBtn') as HTMLElement;
+    this.tabOpenClawBtn = document.getElementById('tabOpenClawBtn') as HTMLElement;
+    this.briefingPanel = document.getElementById('briefingPanel') as HTMLElement;
+    this.mailPanel = document.getElementById('mailPanel') as HTMLElement;
+    this.openClawPanel = document.getElementById('openClawPanel') as HTMLElement;
+    this.refreshIntelBtn = document.getElementById('refreshIntelBtn') as HTMLElement;
+    this.collapseIntelBtn = document.getElementById('collapseIntelBtn') as HTMLElement;
+    this.briefingPrioritiesList = document.getElementById('briefingPrioritiesList') as HTMLElement;
+    this.briefingScheduleList = document.getElementById('briefingScheduleList') as HTMLElement;
+    this.briefingFreshnessTag = document.getElementById('briefingFreshnessTag') as HTMLElement;
+    this.mailHighlightsList = document.getElementById('mailHighlightsList') as HTMLElement;
+    this.mailPrivacyToggle = document.getElementById('mailPrivacyToggle') as HTMLElement;
+    this.openclawStatusDot = document.getElementById('openclawStatusDot') as HTMLElement;
+    this.openclawGatewayLabel = document.getElementById('openclawGatewayLabel') as HTMLElement;
+    this.openclawNodesRow = document.getElementById('openclawNodesRow') as HTMLElement;
+    this.openclawJobsList = document.getElementById('openclawJobsList') as HTMLElement;
+    this.openclawTaskForm = document.getElementById('openclawTaskForm') as HTMLFormElement;
+    this.openclawTaskInput = document.getElementById('openclawTaskInput') as HTMLInputElement;
+    this.openclawHostSelect = document.getElementById('openclawHostSelect') as HTMLSelectElement;
   }
 
   private setupIcons() {
@@ -124,8 +183,9 @@ class PortalNewTabController {
     }, 2800);
   }
 
-  private toggleZenMode() {
+  private async toggleZenMode() {
     const isZen = document.body.classList.toggle('zen-mode');
+    this.prefs = await storage.savePreferences({ zenMode: isZen });
     try {
       localStorage.setItem('portal_zen_mode', isZen ? 'true' : 'false');
     } catch {}
@@ -152,10 +212,12 @@ class PortalNewTabController {
   }
 
   private setupEventListeners() {
-    // Window focus checks for fresh clipboard URLs
-    window.addEventListener('focus', () => {
-      this.checkClipboardForUrl().catch(() => {});
-    });
+    // Only register window focus check if user explicitly opted in to clipboard auto-detection
+    if (this.prefs.autoDetectClipboardUrl) {
+      window.addEventListener('focus', () => {
+        this.checkClipboardForUrl().catch(() => {});
+      });
+    }
 
     // Zen Mode toggle button & keyboard shortcut (Z)
     const zenBtn = document.getElementById('zenToggleBtn');
@@ -267,6 +329,92 @@ class PortalNewTabController {
       bookmarksContent?.classList.remove('hidden');
       openTabsContent?.classList.add('hidden');
       this.renderBookmarks();
+    });
+
+    // Intelligence tabs
+    this.tabBriefingBtn?.addEventListener('click', () => {
+      this.tabBriefingBtn.classList.add('active');
+      this.tabMailBtn?.classList.remove('active');
+      this.tabOpenClawBtn?.classList.remove('active');
+      this.briefingPanel?.classList.remove('hidden');
+      this.mailPanel?.classList.add('hidden');
+      this.openClawPanel?.classList.add('hidden');
+    });
+
+    this.tabMailBtn?.addEventListener('click', () => {
+      this.tabMailBtn.classList.add('active');
+      this.tabBriefingBtn?.classList.remove('active');
+      this.tabOpenClawBtn?.classList.remove('active');
+      this.mailPanel?.classList.remove('hidden');
+      this.briefingPanel?.classList.add('hidden');
+      this.openClawPanel?.classList.add('hidden');
+    });
+
+    this.tabOpenClawBtn?.addEventListener('click', () => {
+      this.tabOpenClawBtn.classList.add('active');
+      this.tabBriefingBtn?.classList.remove('active');
+      this.tabMailBtn?.classList.remove('active');
+      this.openClawPanel?.classList.remove('hidden');
+      this.briefingPanel?.classList.add('hidden');
+      this.mailPanel?.classList.add('hidden');
+    });
+
+    // Refresh Intelligence button
+    this.refreshIntelBtn?.addEventListener('click', () => {
+      this.refreshIntelligenceSurfaces();
+    });
+
+    // Collapse section button
+    this.collapseIntelBtn?.addEventListener('click', () => {
+      const isCollapsed = this.intelSection.classList.toggle('collapsed');
+      this.collapseIntelBtn.textContent = isCollapsed ? '▸' : '▾';
+    });
+
+    // Mail privacy toggle
+    this.mailPrivacyToggle?.addEventListener('click', () => {
+      const isHidden = this.mailPanel.classList.toggle('hide-previews');
+      this.mailPrivacyToggle.textContent = isHidden ? 'Show Previews' : 'Hide Previews';
+    });
+
+    // OpenClaw Task submission form
+    this.openclawTaskForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const taskText = this.openclawTaskInput?.value.trim();
+      const host = (this.openclawHostSelect?.value as 'ideapad' | 'thinkbook') || 'ideapad';
+      if (!taskText) return;
+
+      const res = await openClawBridge.submitTask(taskText, host);
+      if (res.success) {
+        this.showToast(res.message);
+        if (this.openclawTaskInput) this.openclawTaskInput.value = '';
+        const updatedStatus = await storage.getOpenClawStatus();
+        if (updatedStatus) this.renderOpenClaw(updatedStatus);
+      } else {
+        this.showToast(`Task error: ${res.message}`);
+      }
+    });
+
+    // Settings checkboxes
+    const toggleIntelBriefing = document.getElementById('toggleIntelBriefing') as HTMLInputElement | null;
+    toggleIntelBriefing?.addEventListener('change', async () => {
+      this.prefs = await storage.savePreferences({ showIntelligenceBriefing: toggleIntelBriefing.checked });
+      if (this.intelSection) {
+        this.intelSection.classList.toggle('hidden', !toggleIntelBriefing.checked);
+      }
+    });
+
+    const toggleOpenClaw = document.getElementById('toggleOpenClaw') as HTMLInputElement | null;
+    toggleOpenClaw?.addEventListener('change', async () => {
+      this.prefs = await storage.savePreferences({ showOpenClawStatus: toggleOpenClaw.checked });
+      if (this.tabOpenClawBtn) {
+        this.tabOpenClawBtn.classList.toggle('hidden', !toggleOpenClaw.checked);
+      }
+    });
+
+    const toggleClipboardDetect = document.getElementById('toggleClipboardDetect') as HTMLInputElement | null;
+    toggleClipboardDetect?.addEventListener('change', async () => {
+      this.prefs = await storage.savePreferences({ autoDetectClipboardUrl: toggleClipboardDetect.checked });
+      this.showToast(`Clipboard auto-detection ${toggleClipboardDetect.checked ? 'enabled' : 'disabled'}`);
     });
   }
 
@@ -432,6 +580,26 @@ class PortalNewTabController {
       this.searchInput.value = bangPrefix;
       this.searchInput.focus();
       this.handleSearchInput();
+      return;
+    }
+
+    // User-initiated clipboard action
+    if (item.commandId === 'open-clipboard-url') {
+      this.hideSuggestions();
+      if (navigator.clipboard?.readText) {
+        try {
+          const text = (await navigator.clipboard.readText()).trim();
+          if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('chrome://')) {
+            window.location.href = text;
+            return;
+          }
+          this.showToast('Clipboard does not contain a valid URL');
+        } catch {
+          this.showToast('Clipboard read access was not permitted');
+        }
+      } else {
+        this.showToast('Clipboard API unavailable in this browser context');
+      }
       return;
     }
 
@@ -817,6 +985,168 @@ class PortalNewTabController {
         this.renderBookmarkNodes(node.children, childContainer, depth + 1);
       }
     });
+  }
+
+  // --- Personal Intelligence & OpenClaw Surface ---
+
+  private async loadIntelligenceSurfaces() {
+    if (!this.intelSection) return;
+
+    if (this.prefs.showIntelligenceBriefing === false) {
+      this.intelSection.classList.add('hidden');
+      return;
+    }
+    this.intelSection.classList.remove('hidden');
+
+    try {
+      const briefing = (await storage.getBriefing()) || (await briefingService.getBriefing());
+      const mailSnapshot = (await storage.getMailSnapshot()) || (await briefingService.getMailSnapshot());
+      const openClawStatus = (await storage.getOpenClawStatus()) || (await openClawBridge.getStatus());
+
+      this.renderBriefing(briefing);
+      this.renderMail(mailSnapshot);
+      this.renderOpenClaw(openClawStatus);
+    } catch (err) {
+      console.warn('[Portal] Error loading intelligence surfaces:', err);
+    }
+  }
+
+  private async refreshIntelligenceSurfaces() {
+    if (this.refreshIntelBtn) {
+      this.refreshIntelBtn.classList.add('spinning');
+    }
+    this.showToast('Refreshing personal intelligence & gateway status...');
+
+    try {
+      const refreshed = await briefingService.refreshAll();
+      const openClawStatus = await openClawBridge.getStatus();
+
+      this.renderBriefing(refreshed.briefing);
+      this.renderMail(refreshed.mailSnapshot);
+      this.renderOpenClaw(openClawStatus);
+      this.showToast('Intelligence surfaces updated');
+    } catch {
+      this.showToast('Could not refresh intelligence data');
+    } finally {
+      if (this.refreshIntelBtn) {
+        this.refreshIntelBtn.classList.remove('spinning');
+      }
+    }
+  }
+
+  private renderBriefing(briefing: PersonalBriefing) {
+    if (this.briefingFreshnessTag) {
+      const minsAgo = Math.max(1, Math.round((Date.now() - briefing.generatedAt) / (1000 * 60)));
+      this.briefingFreshnessTag.textContent = `Updated ${minsAgo}m ago • ${briefing.status.toUpperCase()}`;
+    }
+
+    // Top Priorities
+    if (this.briefingPrioritiesList) {
+      this.briefingPrioritiesList.innerHTML = '';
+      briefing.topPriorities.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'briefing-item';
+        li.innerHTML = `
+          <div class="briefing-item-title">
+            <span>${this.escapeHtml(item.title)}</span>
+            ${item.actionRequired ? '<span class="briefing-due-badge">Action Required</span>' : ''}
+          </div>
+          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+        `;
+        this.briefingPrioritiesList.appendChild(li);
+      });
+    }
+
+    // Schedule
+    if (this.briefingScheduleList) {
+      this.briefingScheduleList.innerHTML = '';
+      briefing.upcomingCommitments.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'briefing-item';
+        li.innerHTML = `
+          <div class="briefing-item-title">
+            <span>${this.escapeHtml(item.title)}</span>
+            ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
+          </div>
+          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+        `;
+        this.briefingScheduleList.appendChild(li);
+      });
+    }
+  }
+
+  private renderMail(mailSnapshot: ImportantMailSnapshot) {
+    if (!this.mailHighlightsList) return;
+    this.mailHighlightsList.innerHTML = '';
+
+    if (mailSnapshot.items.length === 0) {
+      this.mailHighlightsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px;">No actionable emails found</div>';
+      return;
+    }
+
+    mailSnapshot.items.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'mail-item-card';
+      card.innerHTML = `
+        <div class="mail-item-main">
+          <div class="mail-from">${this.escapeHtml(item.from)}</div>
+          <div class="mail-subject">${this.escapeHtml(item.subject)}</div>
+          <div class="mail-snippet">${this.escapeHtml(item.snippet)}</div>
+          <div class="mail-urgency-tag">✦ ${this.escapeHtml(item.urgencyReason)}</div>
+        </div>
+        <a href="${item.threadUrl}" target="_blank" rel="noopener noreferrer" class="mail-open-btn">Open Thread ↗</a>
+      `;
+      this.mailHighlightsList.appendChild(card);
+    });
+  }
+
+  private renderOpenClaw(status: OpenClawSystemStatus) {
+    if (this.openclawStatusDot && this.openclawGatewayLabel) {
+      if (status.gatewayOnline) {
+        this.openclawStatusDot.className = 'status-dot online';
+        this.openclawGatewayLabel.textContent = `Gateway Online (Port ${status.gatewayPort})`;
+      } else {
+        this.openclawStatusDot.className = 'status-dot stopped';
+        this.openclawGatewayLabel.textContent = `Gateway Standby / Stopped (Port ${status.gatewayPort})`;
+      }
+    }
+
+    if (this.openclawNodesRow) {
+      this.openclawNodesRow.innerHTML = '';
+      status.pairedNodes.forEach((node) => {
+        const pill = document.createElement('span');
+        pill.className = `node-pill ${node.isCoordinator ? 'coordinator' : ''}`;
+        pill.textContent = `${node.name} [${node.status.toUpperCase()}]`;
+        this.openclawNodesRow.appendChild(pill);
+      });
+    }
+
+    if (this.openclawJobsList) {
+      this.openclawJobsList.innerHTML = '';
+      if (status.recentJobs.length === 0) {
+        this.openclawJobsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px;">No recent runs</div>';
+      } else {
+        status.recentJobs.forEach((job) => {
+          const row = document.createElement('div');
+          row.className = 'job-item-row';
+          row.innerHTML = `
+            <span class="job-item-task" title="${this.escapeHtml(job.task)}">${this.escapeHtml(job.task)}</span>
+            <span class="job-host-badge">${job.host.toUpperCase()}</span>
+            <span class="job-status-badge ${job.status}">${job.status.toUpperCase()}</span>
+          `;
+          this.openclawJobsList.appendChild(row);
+        });
+      }
+    }
+  }
+
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   // --- Intelligence Status Badge ---

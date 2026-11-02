@@ -641,6 +641,9 @@ body {
   border-radius: var(--radius-lg);
   width: 480px;
   max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -651,6 +654,7 @@ body {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .settings-header h3 {
@@ -663,6 +667,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  overflow-y: auto;
 }
 
 .setting-item {
@@ -784,6 +789,7 @@ body {
 /* Zen / Focus Mode */
 body.zen-mode .shortcuts-section,
 body.zen-mode .contextual-section,
+body.zen-mode .intel-surface-section,
 body.zen-mode .portal-footer .footer-hint {
   display: none !important;
 }
@@ -800,6 +806,402 @@ body.zen-mode .portal-main {
 body.zen-mode #zenToggleBtn {
   color: var(--accent-color);
   background: var(--surface-active);
+}
+
+/* Personal Intelligence & Orchestration Surface */
+.intel-surface-section {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.intel-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+
+.intel-tabs {
+  display: flex;
+  gap: 16px;
+}
+
+.intel-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.intel-icon-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.intel-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.intel-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.intel-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.source-pill {
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-text);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  padding: 2px 10px;
+}
+
+.freshness-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.intel-privacy-toggle {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.intel-privacy-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Briefing Grid */
+.briefing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 680px) {
+  .briefing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.briefing-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.briefing-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.briefing-item {
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  transition: border-color 0.15s ease;
+}
+
+.briefing-item:hover {
+  border-color: var(--border-hover);
+}
+
+.briefing-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.briefing-item-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.briefing-due-badge {
+  font-size: 11px;
+  color: var(--accent-text);
+  background: var(--surface-active);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Mail Highlights */
+.mail-highlights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mail-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  gap: 14px;
+  transition: all 0.15s ease;
+}
+
+.mail-item-card:hover {
+  border-color: var(--border-hover);
+}
+
+.mail-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mail-from {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.mail-subject {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mail-snippet {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mail-panel.hide-previews .mail-snippet {
+  display: none !important;
+}
+
+.mail-urgency-tag {
+  font-size: 11px;
+  color: #f59e0b;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.mail-open-btn {
+  background: var(--surface-active);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mail-open-btn:hover {
+  background: var(--accent-color);
+  color: #ffffff;
+  border-color: var(--accent-color);
+}
+
+/* OpenClaw Activity & Control */
+.openclaw-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.openclaw-gateway-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.status-dot.stopped {
+  background: #f59e0b;
+}
+
+.open-gateway-link {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.open-gateway-link:hover {
+  text-decoration: underline;
+}
+
+.openclaw-nodes-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.node-pill {
+  font-size: 11px;
+  background: var(--surface-active);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+}
+
+.node-pill.coordinator {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: var(--accent-text);
+}
+
+.openclaw-jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.job-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.job-item-task {
+  color: var(--text-primary);
+  flex: 1;
+  margin-right: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-host-badge {
+  font-size: 10px;
+  background: var(--surface-active);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+
+.job-status-badge {
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.job-status-badge.completed {
+  color: #10b981;
+}
+
+.job-status-badge.queued {
+  color: #f59e0b;
+}
+
+.openclaw-task-form {
+  display: flex;
+  gap: 8px;
+}
+
+.openclaw-task-input {
+  flex: 1;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.openclaw-task-input:focus {
+  border-color: var(--accent-color);
+}
+
+.openclaw-host-select {
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.openclaw-submit-btn {
+  background: var(--accent-color);
+  color: #ffffff;
+}
+
+.openclaw-submit-btn:hover {
+  opacity: 0.9;
 }
 
 .hidden {

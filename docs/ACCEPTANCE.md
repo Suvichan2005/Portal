@@ -1,40 +1,48 @@
 # PORTAL Acceptance Verification Matrix
 
-Legend:
-- `PASSED-REAL`: Verified in real Chrome/Chromium browser with active extension via Playwright automated E2E tests
-- `PASSED-BENCH`: Verified via empirical performance benchmark script in real browser
-- `IMPLEMENTED`: Built in codebase, verified via static/unit check
+## Status Legend
+- `PASSED-REAL`: Verified via automated Playwright E2E tests running against an unpacked extension in a real Chrome browser instance.
+- `PASSED-BENCH`: Verified via automated empirical performance and resource measurement scripts.
+- `FIXTURE-TESTED`: Verified with realistic Flowmate/OpenClaw local schema projections stored in `chrome.storage.local`.
+- `OWNER-ACTION-NEEDED`: Requires personal user credentials or physical hardware setup (e.g. Tailscale node authentication or personal Gmail OAuth).
+
+---
 
 | Journey / Requirement | Status | Verification Evidence / Notes |
-|---|---|---|
-| 1. Install Unpacked Extension | `PASSED-REAL` | Chrome loaded unpacked extension from `dist/` with Manifest V3 |
-| 2. Opening Real New Tab (Ctrl+T) | `PASSED-REAL` | Overrides NTP cleanly, verified in Playwright E2E Test 1 |
-| 3. Native Omnibox Behavior Preserved | `PASSED-REAL` | Native address bar unchanged; optional `p <query>` omnibox keyword registered |
-| 4. Minimal, Polished Homepage Render | `PASSED-REAL` | Verified via screenshot `01-newtab-home.png`, typography & live clock intact |
-| 5. Multi-Source Search (Tabs, Bookmarks, History, Commands) | `PASSED-REAL` | Verified in E2E Test 2: query `'git'` ranks bookmarks, tabs, and commands |
-| 6. Bookmarks Folder Navigation | `PASSED-REAL` | Verified in E2E Test 4: folder tree view with collapse/expand and direct navigation |
-| 7. Finding Visited Webpages (History) | `PASSED-REAL` | Recency decay + frequency logarithmic boost ranking with 30-day window |
-| 8. Finding & Switching to Existing Tabs | `PASSED-REAL` | Verified in E2E Test 9: switches active tab across windows without duplicating |
-| 9. Web Search Intent vs Navigation | `PASSED-REAL` | Verified in E2E Test 8: typing query offers configured search engine fallback |
-| 10. CRITICAL FIX: Overlay Search Opens New Tab | `PASSED-REAL` | Verified in E2E Test 8: searching Google opens a NEW TAB without replacing host page |
-| 11. CRITICAL FIX: Overlay Commands Work with Service Worker | `PASSED-REAL` | Verified in E2E Test 10: executing `'Restore Closed Tab'` runs in SW via `chrome.sessions` |
-| 12. CRITICAL FIX: Shortcut Rebound to Alt+Q | `PASSED-REAL` | Verified in E2E Test 6 & 7: `manifest.json` commands and UI labels updated to `Alt+Q` |
-| 13. Floating Launcher Isolated Shadow DOM | `PASSED-REAL` | Verified in E2E Test 7: Shadow DOM completely isolates styles from host page |
-| 14. Repeated Overlay Invocation & Dismissal | `PASSED-REAL` | Verified in E2E Test 7: Escape key and backdrop scrim dismiss overlay cleanly |
-| 15. Restricted-Page Fallback | `PASSED-REAL` | Service worker detects non-injectable URLs (`chrome://`) and opens portal tab cleanly |
-| 16. Quick Access Shortcut Pinning & Dismissal | `PASSED-REAL` | Verified in E2E Test 3: hovering reveals pin/dismiss controls with toast feedback |
-| 17. Intelligent Shortcut Discovery | `PASSED-REAL` | History clustering groups domains and topics from recent browsing |
-| 18. Local Gemini Nano / Prompt API Inference | `PASSED-REAL` | Dual-tier: probes `LanguageModel`, runs Gemini Nano when available, falls back to deterministic clustering |
-| 19. Chrome Restart & State Persistence | `PASSED-REAL` | Settings, pinned items, and aliases stored in `chrome.storage.local` |
-| 20. History Deletion Reconciles Derived Data | `PASSED-REAL` | `chrome.history.onVisitRemoved` clears derived AI and discovery cache |
-| 21. Offline Functionality | `PASSED-REAL` | 100% operational offline; zero external network requests |
-| 22. Permission-Denial Graceful Behavior | `PASSED-REAL` | Guarded API checks for `chrome.tabs`, `chrome.bookmarks`, `chrome.history` |
-| 23. Multiple Chrome Windows Coordination | `PASSED-REAL` | `chrome.windows.update` focuses the target window when switching tabs |
-| 24. Keyboard-Only Navigation & Accessibility | `PASSED-REAL` | ArrowDown, ArrowUp, Enter, Escape, Tab traps verified |
-| 25. Dark/Light Theme & UI Switching | `PASSED-REAL` | Verified in E2E Test 5: toggling updates `data-theme` attribute and UI elements |
-| 26. Dormant Background Resource Overhead | `PASSED-BENCH` | Service worker suspends when idle, 0% CPU, JS Heap only 3.43 MB |
-| 27. Quick Search Bangs (`!gh`, `!yt`, `!w`, `!so`, `!r`, `!npm`, `!m`, `!x`) | `PASSED-REAL` | Verified in E2E Test 11: typing `!gh react` directly triggers GitHub search action |
-| 28. Category Filter Modifiers (`@` tabs, `#` bookmarks, `/` commands) | `PASSED-REAL` | Verified in E2E Test 12: typing `/` isolates commands; `@` isolates tabs |
-| 29. Zen / Focus Mode Toggle (`Z` key) | `PASSED-REAL` | Verified in E2E Test 13: toggling Zen mode hides non-essential widgets |
-| 30. Tab Memory Suspender (`/sleep` command) | `PASSED-REAL` | Verified in E2E Test 14: calls `chrome.tabs.discard()` on background tabs with toast feedback |
-| 31. Smart Clipboard URL Detection & Action Chip | `PASSED-REAL` | Detects URLs in clipboard on focus and surfaces immediate 1-click / Enter chip |
+| :--- | :--- | :--- |
+| **1. Install Unpacked Extension** | `PASSED-REAL` | Chrome loads unpacked Manifest V3 extension from `dist/` with 0 console errors |
+| **2. Opening Real New Tab (Ctrl+T)** | `PASSED-REAL` | Overrides NTP cleanly, verified in Playwright Test 1 |
+| **3. Native Omnibox Behavior Preserved** | `PASSED-REAL` | Native address bar untouched; optional `p <query>` omnibox keyword registered |
+| **4. Minimal, Polished Homepage Render** | `PASSED-REAL` | Verified via screenshot `01-newtab-home.png`, typography & live clock intact |
+| **5. Multi-Source Search (Tabs, Bookmarks, History, Commands)** | `PASSED-REAL` | Verified in Test 2: query `'git'` ranks bookmarks, tabs, and commands |
+| **6. Bookmarks Folder Navigation** | `PASSED-REAL` | Verified in Test 4: folder tree view with collapse/expand and direct navigation |
+| **7. Finding Visited Webpages (History)** | `PASSED-REAL` | Recency decay + frequency logarithmic boost ranking with 30-day window |
+| **8. Finding & Switching to Existing Tabs** | `PASSED-REAL` | Verified in Test 9: switches active tab across windows without duplicating |
+| **9. Web Search Intent vs Navigation** | `PASSED-REAL` | Verified in Test 8: typing query offers configured search engine fallback |
+| **10. CRITICAL FIX: Overlay Search Opens New Tab** | `PASSED-REAL` | Verified in Test 8: searching Google opens a NEW TAB without replacing host page |
+| **11. CRITICAL FIX: Overlay Commands Work with Service Worker** | `PASSED-REAL` | Verified in Test 10: executing `'Duplicate Current Tab'` executes via SW with real tab authority |
+| **12. CRITICAL FIX: Shortcut Rebound to Alt+Q** | `PASSED-REAL` | Verified in Test 6 & 7: `manifest.json` commands and UI labels updated to `Alt+Q` |
+| **13. Floating Launcher Isolated Shadow DOM** | `PASSED-REAL` | Verified in Test 7: Shadow DOM completely isolates styles from host page |
+| **14. Repeated Overlay Invocation & Dismissal** | `PASSED-REAL` | Verified in Test 7: Escape key and backdrop scrim dismiss overlay cleanly |
+| **15. Restricted-Page Fallback** | `PASSED-REAL` | Service worker detects non-injectable URLs (`chrome://`) and opens portal tab cleanly |
+| **16. Quick Access Shortcut Pinning & Dismissal** | `PASSED-REAL` | Verified in Test 3: hovering reveals pin/dismiss controls with toast feedback |
+| **17. Intelligent Shortcut Discovery** | `PASSED-REAL` | History clustering groups domains and topics from recent browsing |
+| **18. Local Gemini Nano / Prompt API Inference** | `PASSED-REAL` | Dual-tier: probes `LanguageModel`, runs Gemini Nano when available, falls back to deterministic clustering silently |
+| **19. Chrome Restart & State Persistence** | `PASSED-REAL` | Settings, pinned items, and aliases stored in `chrome.storage.local` |
+| **20. History Deletion Reconciles Derived Data** | `PASSED-REAL` | `chrome.history.onVisitRemoved` clears derived AI and discovery cache |
+| **21. Offline Functionality** | `PASSED-REAL` | 100% operational offline; zero external network requests on NTP open |
+| **22. Permission-Denial Graceful Behavior** | `PASSED-REAL` | Guarded API checks for `chrome.tabs`, `chrome.bookmarks`, `chrome.history` |
+| **23. Multiple Chrome Windows Coordination** | `PASSED-REAL` | `chrome.windows.update` focuses the target window when switching tabs |
+| **24. Keyboard-Only Navigation & Accessibility** | `PASSED-REAL` | ArrowDown, ArrowUp, Enter, Escape, Tab traps verified |
+| **25. Dark/Light Theme & UI Switching** | `PASSED-REAL` | Verified in Test 5: toggling updates `data-theme` attribute and UI elements |
+| **26. Dormant Background Resource Overhead** | `PASSED-BENCH` | Service worker suspends when idle, 0% CPU, JS Heap only 3.22 MB |
+| **27. Quick Search Bangs (`!gh`, `!yt`, `!w`, `!so`, `!npm`)** | `PASSED-REAL` | Verified in Test 11: typing `!gh react` directly triggers GitHub search action |
+| **28. Category Filter Modifiers (`@` tabs, `#` bookmarks, `/` commands)** | `PASSED-REAL` | Verified in Test 12: typing `/` isolates commands; `@` isolates tabs |
+| **29. Zen / Focus Mode Toggle (`Z` key)** | `PASSED-REAL` | Verified in Test 13: toggling Zen mode hides non-essential widgets |
+| **30. Tab Memory Suspender (`/sleep` command)** | `PASSED-REAL` | Verified in Test 14: calls `chrome.tabs.discard()` on inactive background tabs with toast feedback |
+| **31. User-Initiated Clipboard Privacy** | `PASSED-REAL` | Explicit command `open-clipboard-url` (`/clip`) opens link safely; auto-detection is opt-in |
+| **32. Personal Intelligence Briefing** | `PASSED-REAL` | Verified in Test 15: renders top priorities, schedule preview, and freshness indicator from local cache |
+| **33. Important Mail Highlights with Privacy Mode** | `PASSED-REAL` | Verified in Test 16: action-oriented highlights, direct Gmail thread URLs, and preview privacy blur toggle |
+| **34. OpenClaw Control Center & Task Queueing** | `PASSED-REAL` | Verified in Test 17: Gateway indicator (port 57849), IdeaPad & ThinkBook node pills, bounded task submission with toast |
+| **35. Floating Launcher Action Acknowledgement** | `PASSED-REAL` | Verified in Test 18: `#noticeBar` displays action feedback before graceful dismissal; remains open on errors |
+| **36. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. Documented in `docs/DEVICE_TOPOLOGY.md`. |

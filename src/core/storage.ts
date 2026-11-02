@@ -4,6 +4,9 @@ import {
   DismissedItem,
   CustomAlias,
   CachedIntelligence,
+  PersonalBriefing,
+  ImportantMailSnapshot,
+  OpenClawSystemStatus,
 } from './types';
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -14,6 +17,12 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   showIntelligentShortcuts: true,
   reducedMotion: false,
   density: 'comfortable',
+  zenMode: false,
+  autoDetectClipboardUrl: false,
+  showIntelligenceBriefing: true,
+  showImportantMail: true,
+  showOpenClawStatus: true,
+  hideMailPreviews: false,
 };
 
 const STORAGE_KEYS = {
@@ -22,6 +31,9 @@ const STORAGE_KEYS = {
   DISMISSED: 'portal_dismissed_items',
   ALIASES: 'portal_custom_aliases',
   INTELLIGENCE: 'portal_cached_intelligence',
+  BRIEFING: 'portal_cached_briefing',
+  MAIL_SNAPSHOT: 'portal_cached_mail',
+  OPENCLAW_STATUS: 'portal_cached_openclaw',
 } as const;
 
 class StorageService {
@@ -214,11 +226,101 @@ class StorageService {
   async clearDerivedData(): Promise<void> {
     if (this.isExtensionEnvironment()) {
       return new Promise((resolve) => {
-        chrome.storage.local.remove([STORAGE_KEYS.INTELLIGENCE, STORAGE_KEYS.DISMISSED], () => resolve());
+        chrome.storage.local.remove(
+          [
+            STORAGE_KEYS.INTELLIGENCE,
+            STORAGE_KEYS.DISMISSED,
+            STORAGE_KEYS.BRIEFING,
+            STORAGE_KEYS.MAIL_SNAPSHOT,
+            STORAGE_KEYS.OPENCLAW_STATUS,
+          ],
+          () => resolve(),
+        );
       });
     }
     localStorage.removeItem(STORAGE_KEYS.INTELLIGENCE);
     localStorage.removeItem(STORAGE_KEYS.DISMISSED);
+    localStorage.removeItem(STORAGE_KEYS.BRIEFING);
+    localStorage.removeItem(STORAGE_KEYS.MAIL_SNAPSHOT);
+    localStorage.removeItem(STORAGE_KEYS.OPENCLAW_STATUS);
+  }
+
+  // --- Personal Intelligence Briefing Cache ---
+  async getBriefing(): Promise<PersonalBriefing | null> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.BRIEFING], (result) => {
+          resolve(result[STORAGE_KEYS.BRIEFING] || null);
+        });
+      });
+    }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.BRIEFING);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveBriefing(briefing: PersonalBriefing): Promise<void> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.BRIEFING]: briefing }, () => resolve());
+      });
+    }
+    localStorage.setItem(STORAGE_KEYS.BRIEFING, JSON.stringify(briefing));
+  }
+
+  // --- Important Mail Highlights Cache ---
+  async getMailSnapshot(): Promise<ImportantMailSnapshot | null> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.MAIL_SNAPSHOT], (result) => {
+          resolve(result[STORAGE_KEYS.MAIL_SNAPSHOT] || null);
+        });
+      });
+    }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.MAIL_SNAPSHOT);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveMailSnapshot(snapshot: ImportantMailSnapshot): Promise<void> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.MAIL_SNAPSHOT]: snapshot }, () => resolve());
+      });
+    }
+    localStorage.setItem(STORAGE_KEYS.MAIL_SNAPSHOT, JSON.stringify(snapshot));
+  }
+
+  // --- OpenClaw Activity & System Status Cache ---
+  async getOpenClawStatus(): Promise<OpenClawSystemStatus | null> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.OPENCLAW_STATUS], (result) => {
+          resolve(result[STORAGE_KEYS.OPENCLAW_STATUS] || null);
+        });
+      });
+    }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.OPENCLAW_STATUS);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveOpenClawStatus(status: OpenClawSystemStatus): Promise<void> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.OPENCLAW_STATUS]: status }, () => resolve());
+      });
+    }
+    localStorage.setItem(STORAGE_KEYS.OPENCLAW_STATUS, JSON.stringify(status));
   }
 }
 

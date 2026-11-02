@@ -210,9 +210,63 @@ export const COMMANDS: BrowserCommand[] = [
   {
     id: 'sleep-inactive-tabs',
     title: 'Sleep Inactive Tabs (Save Memory)',
-    description: 'Discard background tabs to reclaim RAM without losing open tabs',
+    description: 'Discard tabs inactive for >10 mins to reclaim RAM while keeping tab titles',
     category: 'tabs',
     keywords: ['sleep', 'suspend', 'discard', 'memory', 'ram', 'free', 'clean', 'tabs', 'performance'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+        return { success: false, message: 'Tabs API not available' };
+      }
+      try {
+        const tabs = await chrome.tabs.query({ active: false, currentWindow: true });
+        const now = Date.now();
+        const INACTIVITY_MS = 10 * 60 * 1000; // 10 minutes safe threshold
+        let suspendedCount = 0;
+        let recentCount = 0;
+
+        for (const tab of tabs) {
+          if (tab.id && !tab.discarded && !tab.pinned && !tab.audible) {
+            // Check lastAccessed threshold
+            const lastActive = tab.lastAccessed || 0;
+            if (now - lastActive >= INACTIVITY_MS || !tab.lastAccessed) {
+              try {
+                await chrome.tabs.discard(tab.id);
+                suspendedCount++;
+              } catch {
+                // Ignore tabs that cannot be discarded
+              }
+            } else {
+              recentCount++;
+            }
+          }
+        }
+
+        if (suspendedCount > 0) {
+          return {
+            success: true,
+            message: `Put ${suspendedCount} inactive background tab${suspendedCount > 1 ? 's' : ''} to sleep`,
+          };
+        }
+
+        if (recentCount > 0) {
+          return {
+            success: true,
+            message: `${recentCount} background tab${recentCount > 1 ? 's were' : ' was'} used recently (<10m). Use /sleep-all to force.`,
+          };
+        }
+
+        return { success: true, message: 'All background tabs are already sleeping' };
+      } catch (err: any) {
+        return { success: false, message: `Could not suspend tabs: ${err.message}` };
+      }
+    },
+  },
+  {
+    id: 'force-sleep-all-tabs',
+    title: 'Force Sleep All Background Tabs',
+    description: 'Immediately discard all background tabs regardless of recent activity',
+    category: 'tabs',
+    keywords: ['force', 'sleep', 'all', 'tabs', 'ram', 'memory', 'discard', 'hibernate'],
     execute: async () => {
       if (typeof chrome === 'undefined' || !chrome.tabs) {
         return { success: false, message: 'Tabs API not available' };
@@ -225,18 +279,16 @@ export const COMMANDS: BrowserCommand[] = [
             try {
               await chrome.tabs.discard(tab.id);
               suspendedCount++;
-            } catch {
-              // Ignore tabs that cannot be discarded
-            }
+            } catch {}
           }
         }
         if (suspendedCount > 0) {
           return {
             success: true,
-            message: `Put ${suspendedCount} background tab${suspendedCount > 1 ? 's' : ''} to sleep`,
+            message: `Force-suspended ${suspendedCount} background tab${suspendedCount > 1 ? 's' : ''}`,
           };
         }
-        return { success: true, message: 'All background tabs are already sleeping' };
+        return { success: true, message: 'No suspendable background tabs found' };
       } catch (err: any) {
         return { success: false, message: `Could not suspend tabs: ${err.message}` };
       }
@@ -249,14 +301,64 @@ export const COMMANDS: BrowserCommand[] = [
     category: 'settings',
     keywords: ['zen', 'focus', 'minimal', 'clean', 'distraction', 'hide', 'mode'],
     execute: async () => {
+      const prefs = await storage.getPreferences();
+      const nextZen = !prefs.zenMode;
+      await storage.savePreferences({ zenMode: nextZen });
+
+      // Apply to active document if in webpage/newtab context
       if (typeof document !== 'undefined') {
-        const isZen = document.body.classList.toggle('zen-mode');
+        document.body.classList.toggle('zen-mode', nextZen);
         try {
-          localStorage.setItem('portal_zen_mode', isZen ? 'true' : 'false');
+          localStorage.setItem('portal_zen_mode', nextZen ? 'true' : 'false');
         } catch {}
-        return { success: true, message: isZen ? 'Zen mode enabled (Press Z to exit)' : 'Zen mode disabled' };
       }
-      return { success: true };
+
+      return {
+        success: true,
+        message: nextZen ? 'Zen mode enabled (Press Z to exit)' : 'Zen mode disabled',
+      };
+    },
+  },
+  {
+    id: 'open-clipboard-url',
+    title: 'Open Link from Clipboard',
+    description: 'Read copied URL from clipboard and navigate to it',
+    category: 'navigation',
+    keywords: ['clipboard', 'paste', 'url', 'link', 'open', 'go'],
+    execute: async () => {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+        try {
+          const text = (await navigator.clipboard.readText()).trim();
+          if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('chrome://')) {
+            if (typeof chrome !== 'undefined' && chrome.tabs) {
+              await chrome.tabs.create({ url: text });
+            } else {
+              window.location.href = text;
+            }
+            return { success: true, message: `Opening ${new URL(text).hostname}` };
+          }
+          return { success: false, message: 'Clipboard does not contain a valid URL' };
+        } catch (err: any) {
+          return { success: false, message: `Clipboard read denied: ${err.message}` };
+        }
+      }
+      return { success: false, message: 'Clipboard API not available in this context' };
+    },
+  },
+  {
+    id: 'openclaw-status',
+    title: 'OpenClaw Gateway & Dashboard',
+    description: 'Open the OpenClaw orchestration dashboard (localhost:57849)',
+    category: 'navigation',
+    keywords: ['openclaw', 'gateway', 'dashboard', 'jobs', 'agents', 'status'],
+    execute: async () => {
+      const gatewayUrl = 'http://127.0.0.1:57849/';
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        await chrome.tabs.create({ url: gatewayUrl });
+      } else {
+        window.open(gatewayUrl, '_blank');
+      }
+      return { success: true, message: 'Opening OpenClaw Gateway Dashboard' };
     },
   },
   {

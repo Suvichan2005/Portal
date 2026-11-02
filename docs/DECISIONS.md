@@ -68,3 +68,36 @@
 - **Alternative Rejected:** Force-closing tabs or installing external background process managers.
 - **Impact:** Frees hundreds of megabytes of RAM on demand with zero lost tabs.
 
+## DEC-012: Layered Orchestration & Strict Separation of Responsibilities
+- **Context:** The mission requires integrating Portal with Flowmate personal context and OpenClaw automation across two machines (IdeaPad and ThinkBook). Blurring these boundaries risks making Portal slow, fragile, and bloated.
+- **Decision:** Enforce architectural separation:
+  - **Portal:** Read-only presentation surface and fast launcher. Reads pre-computed projections from `chrome.storage.local`. Never executes live background agents, heavy LLM inferences, or sync loops during New Tab renders.
+  - **Flowmate:** Source of truth for personal context, goals, commitments, and calendar reconciliation. Emits periodic cached snapshots to Portal.
+  - **OpenClaw:** Automation executor running outside the browser sandbox. Communicates only via loopback HTTP bridge (`127.0.0.1:57849`).
+- **Alternative Rejected:** Running agent loops or live Gmail/Calendar API queries directly inside Chrome extension service worker.
+- **Impact:** Instant NTP load times (<60ms DOM interactive), complete independence if Flowmate/OpenClaw are offline, and zero browser extension bloat.
+
+## DEC-013: User-Initiated Clipboard Privacy & Opt-In Auto-Detection
+- **Context:** Reading `navigator.clipboard.readText()` automatically on every window focus or launcher open raises privacy concerns (e.g. leaking copied passwords or tokens) and triggers unwanted browser permission prompts.
+- **Decision:** Turn automatic clipboard detection into an explicit opt-in preference (`autoDetectClipboardUrl: false` by default). Provide an explicit user-initiated command `open-clipboard-url` (`/clip`) that only inspects clipboard when deliberately triggered.
+- **Alternative Rejected:** Unconditional silent clipboard polling on all focus events.
+- **Impact:** Respects privacy, eliminates unprompted clipboard warnings, and provides immediate link navigation when deliberately invoked.
+
+## DEC-014: Inactivity-Gated Tab Suspension
+- **Context:** Indiscriminately discarding all background tabs causes tabs recently accessed or temporarily in use to be reloaded prematurely upon switching.
+- **Decision:** Update `sleep-inactive-tabs` to check `tab.lastAccessed`. Only tabs inactive for at least 10 minutes (`now - tab.lastAccessed >= 10 * 60 * 1000`) are discarded. Add a separate explicit command `force-sleep-all-tabs` (`/sleep-all`) for users who explicitly want immediate aggressive memory reclamation.
+- **Alternative Rejected:** Discarding all tabs regardless of last access time.
+- **Impact:** Prevents disruption of active multi-tab workflows while still freeing memory on long-idle tabs.
+
+## DEC-015: Loopback Isolation & Zero Token Bundling
+- **Context:** Portal must connect to OpenClaw Gateway on the IdeaPad host without exposing security tokens in the client bundle or accepting arbitrary remote commands.
+- **Decision:** Restrict Gateway probing strictly to loopback (`127.0.0.1:57849`). Portal sends bounded tasks with explicit descriptions and parameters. No secret credentials, JWTs, or SSH private keys are bundled into the extension.
+- **Alternative Rejected:** Embedding static API keys or opening WAN-accessible network sockets in the extension.
+- **Impact:** Eliminates remote attack vectors while allowing seamless local automation orchestration.
+
+## DEC-016: Non-Premature Overlay Dismissal & Notice Acknowledgement
+- **Context:** In earlier builds, the floating launcher closed instantly upon item click before the background service worker could report whether the action succeeded or failed.
+- **Decision:** Overlay awaits message reply from service worker. If the action succeeds with an informative message (e.g. "Zen mode enabled", "Tab duplicated"), an integrated notice bar displays the message for 850ms before dismissal. If the action fails or has no effect, the overlay stays open and displays the reason.
+- **Alternative Rejected:** Blind immediate dismissal on click.
+- **Impact:** Eliminates phantom actions and gives the user real visual certainty that commands executed successfully.
+
