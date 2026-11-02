@@ -28,10 +28,17 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await context?.close();
   });
 
+  async function getExtId(ctx: any): Promise<string> {
+    let sw = (await ctx.serviceWorkers())[0];
+    if (!sw) {
+      sw = await ctx.waitForEvent('serviceworker');
+    }
+    return sw.url().split('/')[2];
+  }
+
   test('1. Extension loads and New Tab page renders with ambient polish and clock', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
 
     await expect(page.locator('#portalSearchInput')).toBeVisible({ timeout: 5000 });
@@ -43,9 +50,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('2. Instant search query returns ranked tabs, bookmarks, and commands', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
 
     const searchInput = page.locator('#portalSearchInput');
@@ -61,9 +67,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('3. Quick Access pinning and toast feedback', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
 
     const shortcutCards = page.locator('.shortcut-card');
@@ -82,9 +87,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('4. Bookmarks tree folder navigation and Open Tabs view', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
     await page.waitForLoadState('domcontentloaded');
 
@@ -107,9 +111,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('5. Theme switcher updates data-theme and UI', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
 
     const themeBtn = page.locator('#themeToggleBtn');
@@ -122,9 +125,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
   });
 
   test('6. Settings modal opens and displays Alt+Q shortcut', async () => {
+    const extId = await getExtId(context);
     const page = await context.newPage();
-    const sw = (await context.serviceWorkers())[0];
-    const extId = sw ? sw.url().split('/')[2] : '';
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
 
     const settingsBtn = page.locator('#settingsBtn');

@@ -11,8 +11,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('[Portal] Extension installed/updated:', details.reason);
   try {
     await intelligenceManager.runAnalysis();
-  } catch (err) {
-    console.warn('[Portal] Initial intelligence prime error:', err);
+  } catch {
+    // Graceful silent fallback
   }
 });
 

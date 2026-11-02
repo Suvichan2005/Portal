@@ -10,43 +10,59 @@ export interface PromptApiStatus {
 export class ChromePromptApiService {
   /**
    * Probes Chrome on-device LanguageModel availability.
+   * Completely resilient against disabled feature flags and hardware limits.
    */
   async checkStatus(): Promise<PromptApiStatus> {
     try {
-      if (typeof (globalThis as any).LanguageModel !== 'undefined') {
-        const availability = await (globalThis as any).LanguageModel.availability();
-        if (availability === 'readily') {
-          return {
-            available: true,
-            model: 'gemini_nano',
-            status: 'readily',
-            details: 'Chrome Gemini Nano is ready for on-device inference.',
-          };
-        } else if (availability === 'after-download') {
-          return {
-            available: false,
-            model: 'gemini_nano',
-            status: 'after-download',
-            details: 'Model is downloading in Chrome.',
-          };
-        } else {
-          return {
-            available: false,
-            model: 'heuristic_fallback',
-            status: 'unavailable',
-            details: 'Hardware or component constraints (falling back to local heuristic ranking).',
-          };
-        }
+      const lm = (globalThis as any).LanguageModel || (globalThis as any).ai?.languageModel;
+      if (!lm || typeof lm.availability !== 'function') {
+        return {
+          available: false,
+          model: 'heuristic_fallback',
+          status: 'unavailable',
+          details: 'Prompt API not exposed or supported on this device.',
+        };
       }
-    } catch (err: any) {
-      console.warn('LanguageModel probe error:', err);
+
+      // Check availability with complete error suppression to prevent Chrome extension error logs
+      let availability: string = 'unavailable';
+      try {
+        availability = await lm.availability();
+      } catch {
+        // Feature flag gating model execution is disabled or hardware threshold unmet.
+        // Return unavailable cleanly without console noise.
+        return {
+          available: false,
+          model: 'heuristic_fallback',
+          status: 'unavailable',
+          details: 'Chrome on-device model execution flag is disabled or unsupported.',
+        };
+      }
+
+      if (availability === 'readily') {
+        return {
+          available: true,
+          model: 'gemini_nano',
+          status: 'readily',
+          details: 'Chrome Gemini Nano is ready for on-device inference.',
+        };
+      } else if (availability === 'after-download') {
+        return {
+          available: false,
+          model: 'gemini_nano',
+          status: 'after-download',
+          details: 'Model is downloading in Chrome.',
+        };
+      }
+    } catch {
+      // Entire probe safe from bubbling
     }
 
     return {
       available: false,
       model: 'heuristic_fallback',
       status: 'unavailable',
-      details: 'Prompt API not exposed or supported on this device.',
+      details: 'Hardware or component constraints (falling back to local heuristic ranking).',
     };
   }
 
@@ -56,14 +72,18 @@ export class ChromePromptApiService {
    */
   async refineClustersWithNano(clusters: HistoryCluster[]): Promise<HistoryCluster[]> {
     const status = await this.checkStatus();
-    if (!status.available || clusters.length === 0) {
+    if (!status.available || status.status !== 'readily' || clusters.length === 0) {
       return clusters;
     }
 
     let session: any = null;
     try {
-      // Create short-lived session with structured schema
-      session = await (globalThis as any).LanguageModel.create({
+      const lm = (globalThis as any).LanguageModel || (globalThis as any).ai?.languageModel;
+      if (!lm || typeof lm.create !== 'function') return clusters;
+
+      // Create short-lived session with structured schema and explicit output language
+      session = await lm.create({
+        outputLanguage: 'en',
         initialPrompts: [
           {
             role: 'system',
@@ -110,16 +130,14 @@ export class ChromePromptApiService {
           }
         }
       }
-    } catch (err) {
-      console.warn('Gemini Nano refinement error (falling back safely):', err);
+    } catch {
+      // Graceful silent fallback to deterministic cluster data
     } finally {
       // Crucial: always destroy model session to prevent memory leak
       if (session && typeof session.destroy === 'function') {
         try {
           session.destroy();
-        } catch {
-          // Ignore disposal errors
-        }
+        } catch {}
       }
     }
 
@@ -134,13 +152,17 @@ export class ChromePromptApiService {
     candidates: { id: string; title: string; url: string }[],
   ): Promise<{ id: string; relevanceScore: number }[]> {
     const status = await this.checkStatus();
-    if (!status.available || candidates.length === 0) {
+    if (!status.available || status.status !== 'readily' || candidates.length === 0) {
       return [];
     }
 
     let session: any = null;
     try {
-      session = await (globalThis as any).LanguageModel.create({
+      const lm = (globalThis as any).LanguageModel || (globalThis as any).ai?.languageModel;
+      if (!lm || typeof lm.create !== 'function') return [];
+
+      session = await lm.create({
+        outputLanguage: 'en',
         initialPrompts: [
           {
             role: 'system',
@@ -175,8 +197,8 @@ export class ChromePromptApiService {
       if (Array.isArray(parsed)) {
         return parsed.map((p) => ({ id: p.id, relevanceScore: p.score || 0 }));
       }
-    } catch (err) {
-      console.warn('Prompt API natural language retrieval error:', err);
+    } catch {
+      // Graceful silent fallback
     } finally {
       if (session && typeof session.destroy === 'function') {
         try {

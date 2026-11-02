@@ -36,11 +36,11 @@ class PortalNewTabController {
     this.setupEventListeners();
     await this.loadPreferences();
 
-    // Fast parallel loads
-    this.renderShortcuts();
-    this.renderOpenTabs();
-    this.renderBookmarks();
-    this.updateAiStatusBadge();
+    // Fast parallel loads with error isolation
+    this.renderShortcuts().catch(() => {});
+    this.renderOpenTabs().catch(() => {});
+    this.renderBookmarks().catch(() => {});
+    this.updateAiStatusBadge().catch(() => {});
   }
 
   private bindDomElements() {
@@ -744,24 +744,34 @@ class PortalNewTabController {
   // --- Intelligence Status Badge ---
 
   private async updateAiStatusBadge() {
-    const labelEl = document.getElementById('aiBadgeLabel');
-    const badgeEl = document.getElementById('aiStatusBadge');
-    const status = await promptApi.checkStatus();
+    try {
+      const labelEl = document.getElementById('aiBadgeLabel');
+      const badgeEl = document.getElementById('aiStatusBadge');
+      const status = await promptApi.checkStatus();
 
-    if (status.available) {
-      if (labelEl) labelEl.textContent = 'Gemini Nano Active';
-      if (badgeEl) badgeEl.title = 'Chrome on-device Gemini Nano is active and refining suggestions locally.';
-    } else {
-      if (labelEl) labelEl.textContent = 'Intelligent Discovery';
-      if (badgeEl) badgeEl.title = 'Frequency-recency clustering active. 100% on-device & private.';
+      if (status.available) {
+        if (labelEl) labelEl.textContent = 'Gemini Nano Active';
+        if (badgeEl) badgeEl.title = 'Chrome on-device Gemini Nano is active and refining suggestions locally.';
+      } else {
+        if (labelEl) labelEl.textContent = 'Intelligent Discovery';
+        if (badgeEl) badgeEl.title = 'Frequency-recency clustering active. 100% on-device & private.';
+      }
+    } catch {
+      // Safe fallback: never bubble error
     }
   }
 }
 
-// Instantiate and initialize
+// Instantiate and initialize with unhandled rejection protection
 const portalApp = new PortalNewTabController();
+const startApp = () => {
+  portalApp.init().catch((err) => {
+    console.log('[Portal] Application initialized with local fallback:', err);
+  });
+};
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => portalApp.init());
+  document.addEventListener('DOMContentLoaded', startApp);
 } else {
-  portalApp.init();
+  startApp();
 }

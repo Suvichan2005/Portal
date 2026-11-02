@@ -1,14 +1,10 @@
 import { chromium } from '@playwright/test';
 
 async function probeSystemChromeAvailability() {
-  console.log('--- Probing System Google Chrome LanguageModel.availability() ---');
+  console.log('--- Probing System Google Chrome LanguageModel.availability() WITHOUT FLAGS ---');
   const browser = await chromium.launch({
     headless: true,
     executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    args: [
-      '--enable-features=PromptAPIForGeminiNano,OptimizationGuideOnDeviceModel',
-      '--enable-blink-features=PromptAPIForGeminiNano',
-    ],
   });
 
   const page = await browser.newPage();
@@ -23,11 +19,9 @@ async function probeSystemChromeAvailability() {
         res.availabilityError = e.message;
       }
       try {
-        if (typeof (window as any).LanguageModel.params === 'function') {
-          res.params = await (window as any).LanguageModel.params();
-        }
+        await (window as any).LanguageModel.create();
       } catch (e: any) {
-        res.paramsError = e.message;
+        res.createError = e.message;
       }
     }
     return res;

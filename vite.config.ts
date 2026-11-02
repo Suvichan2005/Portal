@@ -35,6 +35,17 @@ export default defineConfig({
         if (existsSync('public/icons')) {
           cpSync('public/icons', 'dist/icons', { recursive: true });
         }
+        if (existsSync('dist/src/newtab/index.html')) {
+          copyFileSync('dist/src/newtab/index.html', 'dist/index.html');
+          copyFileSync('dist/src/newtab/index.html', 'dist/newtab.html');
+        }
+        // Also ensure service-worker.js and overlay.js exist at root if user loads repo root
+        if (existsSync('dist/service-worker.js')) {
+          copyFileSync('dist/service-worker.js', 'service-worker.js');
+        }
+        if (existsSync('dist/overlay.js')) {
+          copyFileSync('dist/overlay.js', 'overlay.js');
+        }
       },
     },
   ],

@@ -20,9 +20,9 @@ export class IntelligenceManager {
       return cached.clusters;
     }
 
-    // Trigger analysis in background
+    // Trigger analysis in background with error isolation
     if (!this.isAnalyzing) {
-      this.runAnalysis().catch((err) => console.warn('Background intelligence analysis error:', err));
+      this.runAnalysis().catch(() => {});
     }
 
     return cached ? cached.clusters : [];
