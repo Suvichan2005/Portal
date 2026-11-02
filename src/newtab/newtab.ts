@@ -24,6 +24,9 @@ class PortalNewTabController {
   private openTabsGrid!: HTMLElement;
   private bookmarksTree!: HTMLElement;
   private toastEl!: HTMLElement;
+  private clipboardChip!: HTMLElement;
+  private clipboardChipUrl!: HTMLElement;
+  private currentClipboardUrl: string | null = null;
 
   private currentSuggestions: SearchResult[] = [];
   private selectedSuggestionIndex = -1;
@@ -35,6 +38,14 @@ class PortalNewTabController {
     this.setupClock();
     this.setupEventListeners();
     await this.loadPreferences();
+
+    // Check Zen Mode state from local storage
+    if (localStorage.getItem('portal_zen_mode') === 'true') {
+      document.body.classList.add('zen-mode');
+    }
+
+    // Check clipboard for copied URLs
+    this.checkClipboardForUrl().catch(() => {});
 
     // Fast parallel loads with error isolation
     this.renderShortcuts().catch(() => {});
@@ -51,6 +62,8 @@ class PortalNewTabController {
     this.openTabsGrid = document.getElementById('openTabsGrid') as HTMLElement;
     this.bookmarksTree = document.getElementById('bookmarksTree') as HTMLElement;
     this.toastEl = document.getElementById('portalToast') as HTMLElement;
+    this.clipboardChip = document.getElementById('clipboardChip') as HTMLElement;
+    this.clipboardChipUrl = document.getElementById('clipboardChipUrl') as HTMLElement;
   }
 
   private setupIcons() {
@@ -111,7 +124,63 @@ class PortalNewTabController {
     }, 2800);
   }
 
+  private toggleZenMode() {
+    const isZen = document.body.classList.toggle('zen-mode');
+    try {
+      localStorage.setItem('portal_zen_mode', isZen ? 'true' : 'false');
+    } catch {}
+    this.showToast(isZen ? 'Zen mode enabled (Press Z to exit)' : 'Zen mode disabled');
+  }
+
+  private async checkClipboardForUrl() {
+    if (!navigator.clipboard?.readText) return;
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('chrome://')) {
+        this.currentClipboardUrl = text;
+        if (this.clipboardChip && this.clipboardChipUrl) {
+          this.clipboardChipUrl.textContent = text;
+          this.clipboardChip.classList.remove('hidden');
+        }
+      } else {
+        this.currentClipboardUrl = null;
+        if (this.clipboardChip) this.clipboardChip.classList.add('hidden');
+      }
+    } catch {
+      // Gracefully handle clipboard permission denial or lack of focus
+    }
+  }
+
   private setupEventListeners() {
+    // Window focus checks for fresh clipboard URLs
+    window.addEventListener('focus', () => {
+      this.checkClipboardForUrl().catch(() => {});
+    });
+
+    // Zen Mode toggle button & keyboard shortcut (Z)
+    const zenBtn = document.getElementById('zenToggleBtn');
+    zenBtn?.addEventListener('click', () => this.toggleZenMode());
+
+    document.addEventListener('keydown', (e) => {
+      if (
+        e.key.toLowerCase() === 'z' &&
+        document.activeElement !== this.searchInput &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        this.toggleZenMode();
+      }
+    });
+
+    // Clipboard chip click
+    this.clipboardChip?.addEventListener('click', () => {
+      if (this.currentClipboardUrl) {
+        window.location.href = this.currentClipboardUrl;
+      }
+    });
+
     // Search input
     this.searchInput.addEventListener('input', () => {
       clearTimeout(this.debounceTimer);
@@ -357,6 +426,15 @@ class PortalNewTabController {
   }
 
   private async executeSuggestion(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
+    // If selecting a bang guide entry (e.g. "!gh <query>"), fill bang into input to let user type query
+    if (item.badge === 'BANG' && item.title.startsWith('!')) {
+      const bangPrefix = item.title.split(' ')[0] + ' ';
+      this.searchInput.value = bangPrefix;
+      this.searchInput.focus();
+      this.handleSearchInput();
+      return;
+    }
+
     if (item.type === 'command' && item.commandId) {
       const cmd = COMMANDS.find((c) => c.id === item.commandId);
       if (cmd) {

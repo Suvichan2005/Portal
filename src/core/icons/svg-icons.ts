@@ -45,7 +45,7 @@ export function getFaviconUrl(pageUrl?: string): string {
     if (url.protocol.startsWith('chrome')) {
       return '';
     }
-    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+    if (typeof chrome !== 'undefined' && typeof chrome.runtime?.getURL === 'function') {
       // Official Chrome Manifest V3 Favicon permission pattern
       return `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=32`;
     }

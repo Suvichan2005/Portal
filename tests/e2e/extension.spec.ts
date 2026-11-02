@@ -268,4 +268,86 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await cmdItem.click();
     await expect(host).toBeHidden({ timeout: 2000 });
   });
+
+  test('11. Quick Search Bangs (!gh, !yt, !w) generate instant direct search actions', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+
+    // Test GitHub bang: !gh react
+    await searchInput.fill('!gh react');
+    const panel = page.locator('#suggestionsPanel');
+    await expect(panel).toBeVisible({ timeout: 3000 });
+
+    const ghItem = page.locator('.suggestion-item', { hasText: 'Search GitHub for "react"' });
+    await expect(ghItem).toBeVisible();
+    await expect(ghItem.locator('.suggestion-badge')).toHaveText('!GH');
+
+    // Test YouTube bang: !yt lofi
+    await searchInput.fill('!yt lofi');
+    const ytItem = page.locator('.suggestion-item', { hasText: 'Search YouTube for "lofi"' });
+    await expect(ytItem).toBeVisible();
+    await expect(ytItem.locator('.suggestion-badge')).toHaveText('!YT');
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/08-search-bangs.png` });
+  });
+
+  test('12. Category filter modifiers (@tabs, #bookmarks, /commands) isolate search results', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+
+    // Test commands filter: /
+    await searchInput.fill('/');
+    const panel = page.locator('#suggestionsPanel');
+    await expect(panel).toBeVisible({ timeout: 3000 });
+
+    const cmdItem = page.locator('.suggestion-item', { hasText: 'Sleep Inactive Tabs' });
+    await expect(cmdItem).toBeVisible();
+    await expect(cmdItem.locator('.suggestion-badge')).toHaveText('COMMAND');
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/09-category-filter-commands.png` });
+  });
+
+  test('13. Zen / Focus mode toggles minimal distraction-free state', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const zenBtn = page.locator('#zenToggleBtn');
+    await expect(zenBtn).toBeVisible({ timeout: 3000 });
+
+    // Click Zen toggle
+    await zenBtn.click();
+    await expect(page.locator('body')).toHaveClass(/zen-mode/);
+    await expect(page.locator('#shortcutsSection')).toBeHidden();
+
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/10-zen-mode.png` });
+
+    // Click again to exit Zen mode
+    await zenBtn.click();
+    await expect(page.locator('body')).not.toHaveClass(/zen-mode/);
+    await expect(page.locator('#shortcutsSection')).toBeVisible();
+  });
+
+  test('14. Tab Memory Suspender command executes and displays feedback toast', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+    await searchInput.fill('/sleep');
+
+    const suspendItem = page.locator('.suggestion-item', { hasText: 'Sleep Inactive Tabs' });
+    await expect(suspendItem).toBeVisible({ timeout: 3000 });
+    await suspendItem.click();
+
+    // Verify feedback toast appears
+    const toast = page.locator('#portalToast');
+    await expect(toast).toBeVisible({ timeout: 3000 });
+  });
 });

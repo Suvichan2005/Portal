@@ -16,6 +16,7 @@
     <header class="portal-header">
       <div class="header-clock" id="headerClock">12:00</div>
       <div class="header-actions">
+        <button id="zenToggleBtn" class="icon-btn" title="Toggle Zen / Focus Mode (Z)" aria-label="Zen Mode">✦</button>
         <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle Theme"></button>
         <button id="settingsBtn" class="icon-btn" title="Settings & Commands" aria-label="Settings"></button>
       </div>
@@ -30,7 +31,7 @@
             type="text"
             id="portalSearchInput"
             class="portal-search-input"
-            placeholder="Search bookmarks, open tabs, history, or web..."
+            placeholder="Search bookmarks, open tabs, history, or !bangs..."
             autocomplete="off"
             spellcheck="false"
             autofocus
@@ -38,6 +39,14 @@
           <div class="search-kbd-hint">
             <span class="kbd">↵</span> to select
           </div>
+        </div>
+
+        <!-- Smart Clipboard Action Chip -->
+        <div class="clipboard-chip hidden" id="clipboardChip" title="Click or press Enter to open link from clipboard">
+          <span class="chip-icon">📋</span>
+          <span class="chip-label">Clipboard link:</span>
+          <span class="chip-url" id="clipboardChipUrl"></span>
+          <span class="chip-action">Open ↵</span>
         </div>
 
         <!-- Instant Dynamic Suggestions -->
@@ -98,6 +107,17 @@
               <option value="duckduckgo">DuckDuckGo</option>
               <option value="bing">Bing</option>
             </select>
+          </div>
+          <div class="setting-item">
+            <label>Search Bangs & Filter Modifiers</label>
+            <div class="setting-desc">
+              Type <span class="kbd">!gh</span> (GitHub), <span class="kbd">!yt</span> (YouTube), <span class="kbd">!w</span> (Wikipedia), <span class="kbd">!so</span> (Stack Overflow), or <span class="kbd">!npm</span>.<br>
+              Filter with <span class="kbd">@</span> for open tabs, <span class="kbd">#</span> for bookmarks, <span class="kbd">/</span> for commands.
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>Zen / Focus Mode</label>
+            <div class="setting-desc">Press <span class="kbd">Z</span> anytime on the new tab page to toggle an ultra-clean view.</div>
           </div>
           <div class="setting-item">
             <label>Floating Command Palette</label>

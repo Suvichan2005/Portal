@@ -207,4 +207,86 @@ export const COMMANDS: BrowserCommand[] = [
       return { success: true, message: 'AI discovery cache cleared' };
     },
   },
+  {
+    id: 'sleep-inactive-tabs',
+    title: 'Sleep Inactive Tabs (Save Memory)',
+    description: 'Discard background tabs to reclaim RAM without losing open tabs',
+    category: 'tabs',
+    keywords: ['sleep', 'suspend', 'discard', 'memory', 'ram', 'free', 'clean', 'tabs', 'performance'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+        return { success: false, message: 'Tabs API not available' };
+      }
+      try {
+        const tabs = await chrome.tabs.query({ active: false, currentWindow: true });
+        let suspendedCount = 0;
+        for (const tab of tabs) {
+          if (tab.id && !tab.discarded && !tab.pinned && !tab.audible) {
+            try {
+              await chrome.tabs.discard(tab.id);
+              suspendedCount++;
+            } catch {
+              // Ignore tabs that cannot be discarded
+            }
+          }
+        }
+        if (suspendedCount > 0) {
+          return {
+            success: true,
+            message: `Put ${suspendedCount} background tab${suspendedCount > 1 ? 's' : ''} to sleep`,
+          };
+        }
+        return { success: true, message: 'All background tabs are already sleeping' };
+      } catch (err: any) {
+        return { success: false, message: `Could not suspend tabs: ${err.message}` };
+      }
+    },
+  },
+  {
+    id: 'toggle-zen-mode',
+    title: 'Toggle Zen / Focus Mode',
+    description: 'Switch between full dashboard and distraction-free minimal view',
+    category: 'settings',
+    keywords: ['zen', 'focus', 'minimal', 'clean', 'distraction', 'hide', 'mode'],
+    execute: async () => {
+      if (typeof document !== 'undefined') {
+        const isZen = document.body.classList.toggle('zen-mode');
+        try {
+          localStorage.setItem('portal_zen_mode', isZen ? 'true' : 'false');
+        } catch {}
+        return { success: true, message: isZen ? 'Zen mode enabled (Press Z to exit)' : 'Zen mode disabled' };
+      }
+      return { success: true };
+    },
+  },
+  {
+    id: 'open-chrome-flags',
+    title: 'Chrome Experiments & AI Flags',
+    description: 'Configure on-device Gemini Nano & Prompt API flags',
+    category: 'settings',
+    keywords: ['flags', 'ai', 'nano', 'gemini', 'prompt', 'experiments'],
+    execute: async () => {
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        await chrome.tabs.create({ url: 'chrome://flags' });
+      } else {
+        window.open('chrome://flags', '_blank');
+      }
+      return { success: true };
+    },
+  },
+  {
+    id: 'open-chrome-components',
+    title: 'Chrome Components & Model Updater',
+    description: 'Inspect On-Device Model and browser component updates',
+    category: 'settings',
+    keywords: ['components', 'updater', 'model', 'nano', 'ai'],
+    execute: async () => {
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        await chrome.tabs.create({ url: 'chrome://components' });
+      } else {
+        window.open('chrome://components', '_blank');
+      }
+      return { success: true };
+    },
+  },
 ];

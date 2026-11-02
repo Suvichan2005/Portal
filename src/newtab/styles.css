@@ -730,6 +730,78 @@ body {
   margin-top: 20px;
 }
 
+/* Smart Clipboard Action Chip */
+.clipboard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+  max-width: 100%;
+}
+
+.clipboard-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.clipboard-chip .chip-icon {
+  font-size: 13px;
+}
+
+.clipboard-chip .chip-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.clipboard-chip .chip-url {
+  color: var(--accent-text);
+  font-family: monospace;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-chip .chip-action {
+  font-size: 11px;
+  background: var(--surface-active);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+/* Zen / Focus Mode */
+body.zen-mode .shortcuts-section,
+body.zen-mode .contextual-section,
+body.zen-mode .portal-footer .footer-hint {
+  display: none !important;
+}
+
+body.zen-mode .portal-container {
+  min-height: 80vh;
+  justify-content: space-between;
+}
+
+body.zen-mode .portal-main {
+  margin-top: 12vh;
+}
+
+body.zen-mode #zenToggleBtn {
+  color: var(--accent-color);
+  background: var(--surface-active);
+}
+
 .hidden {
   display: none !important;
 }

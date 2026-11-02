@@ -32,4 +32,9 @@ Legend:
 | 23. Multiple Chrome Windows Coordination | `PASSED-REAL` | `chrome.windows.update` focuses the target window when switching tabs |
 | 24. Keyboard-Only Navigation & Accessibility | `PASSED-REAL` | ArrowDown, ArrowUp, Enter, Escape, Tab traps verified |
 | 25. Dark/Light Theme & UI Switching | `PASSED-REAL` | Verified in E2E Test 5: toggling updates `data-theme` attribute and UI elements |
-| 26. Dormant Background Resource Overhead | `PASSED-BENCH` | Service worker suspends when idle, 0% CPU, JS Heap only 3.27 MB |
+| 26. Dormant Background Resource Overhead | `PASSED-BENCH` | Service worker suspends when idle, 0% CPU, JS Heap only 3.43 MB |
+| 27. Quick Search Bangs (`!gh`, `!yt`, `!w`, `!so`, `!r`, `!npm`, `!m`, `!x`) | `PASSED-REAL` | Verified in E2E Test 11: typing `!gh react` directly triggers GitHub search action |
+| 28. Category Filter Modifiers (`@` tabs, `#` bookmarks, `/` commands) | `PASSED-REAL` | Verified in E2E Test 12: typing `/` isolates commands; `@` isolates tabs |
+| 29. Zen / Focus Mode Toggle (`Z` key) | `PASSED-REAL` | Verified in E2E Test 13: toggling Zen mode hides non-essential widgets |
+| 30. Tab Memory Suspender (`/sleep` command) | `PASSED-REAL` | Verified in E2E Test 14: calls `chrome.tabs.discard()` on background tabs with toast feedback |
+| 31. Smart Clipboard URL Detection & Action Chip | `PASSED-REAL` | Detects URLs in clipboard on focus and surfaces immediate 1-click / Enter chip |

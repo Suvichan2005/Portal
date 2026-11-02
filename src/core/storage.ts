@@ -13,6 +13,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   showRecentTabs: true,
   showIntelligentShortcuts: true,
   reducedMotion: false,
+  density: 'comfortable',
 };
 
 const STORAGE_KEYS = {

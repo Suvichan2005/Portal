@@ -43,3 +43,28 @@
 - **Decision:** Register `"Alt+Q"` in `manifest.json` under `commands.toggle-launcher` across windows, mac, and default platforms. Update all visual badges, tooltips, and settings descriptions across both surfaces.
 - **Alternative Rejected:** Retaining `Alt+K` or unconfigurable fixed bindings.
 - **Impact:** Direct ergonomic access with clear visual signposting in the UI.
+
+## DEC-008: Silent Fallback for Experimental Prompt API Feature Flags
+- **Context:** When Chrome's experimental on-device AI flags are disabled in `chrome://flags`, Chromium rejects `LanguageModel.availability()` with `"The feature flag gating model execution was disabled"`. In v1.1.0, logging this via `console.warn` caused Chrome's extensions manager (`chrome://extensions`) to flag the extension with a red "Errors" badge at `src/newtab/index.html:0`.
+- **Decision:** Wrap the probe in a silent `try...catch` block in `src/core/ai/prompt-api.ts`. If the feature flag is disabled or rejected, resolve immediately to `'unavailable'` without printing warnings. Additionally, wrap all asynchronous initialization calls in `newtab.ts` with error-isolated `.catch(() => {})`.
+- **Alternative Rejected:** Logging errors to console or failing new tab initialization.
+- **Impact:** Zero red error badges in `chrome://extensions`, robust graceful fallback to deterministic discovery.
+
+## DEC-009: Quick Search Bangs & Category Filters
+- **Context:** Power users want DuckDuckGo-style direct search shortcuts (`!gh react`, `!yt lofi`, `!w`, `!so`, `!npm`) without opening individual websites first.
+- **Decision:** Implement dedicated bang matcher (`src/core/search/bangs.ts`) prioritizing direct search actions with score 3500, plus category prefixes (`@` for open tabs, `#` for bookmarks, `/` for commands).
+- **Alternative Rejected:** Forcing users to type full URLs or rely only on general web search engines.
+- **Impact:** Instant one-keystroke routing to developer docs, video platforms, and code repositories.
+
+## DEC-010: Smart Clipboard URL Detection
+- **Context:** Users frequently copy URLs from chat apps, emails, or terminals and want to immediately open them in their browser.
+- **Decision:** Check `navigator.clipboard.readText()` on page focus and launcher summon. If text is a valid HTTP/HTTPS URL, surface an unobtrusive action chip and top search suggestion.
+- **Alternative Rejected:** Auto-navigating without user confirmation (can cause unexpected navigation if user copied unintended text).
+- **Impact:** Seamless 1-click or Enter key navigation to copied links without manual pasting.
+
+## DEC-011: Native Tab Discarding for Memory Management
+- **Context:** Chrome users with multiple open tabs face significant memory pressure, but closing tabs loses active workspace context.
+- **Decision:** Add command `Sleep Inactive Tabs (Save Memory)` (`/sleep-tabs`) calling `chrome.tabs.discard()`. This reclaims RAM for all non-active, non-audible background tabs while leaving their titles and favicons intact in the tab bar.
+- **Alternative Rejected:** Force-closing tabs or installing external background process managers.
+- **Impact:** Frees hundreds of megabytes of RAM on demand with zero lost tabs.
+

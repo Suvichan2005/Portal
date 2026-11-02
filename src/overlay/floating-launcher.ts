@@ -364,11 +364,11 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
         const img = document.createElement('img');
         img.src = res.favicon;
         img.onerror = () => {
-          iconDiv.innerHTML = getResultIcon(res.type);
+          iconDiv.innerHTML = getResultIcon(res.type, res.badge);
         };
         iconDiv.appendChild(img);
       } else {
-        iconDiv.innerHTML = getResultIcon(res.type);
+        iconDiv.innerHTML = getResultIcon(res.type, res.badge);
       }
 
       const info = document.createElement('div');
@@ -407,7 +407,10 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
     scrollSelectedIntoView();
   }
 
-  function getResultIcon(type: string): string {
+  function getResultIcon(type: string, badge?: string): string {
+    if (badge === 'CLIPBOARD') {
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>`;
+    }
     switch (type) {
       case 'tab':
         return Icons.tab;
@@ -446,6 +449,15 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 
   // Execute selected item via runtime messaging to service worker!
   async function executeResult(item: SearchResult, e?: MouseEvent | KeyboardEvent) {
+    // If selecting a bang guide entry (e.g. "!gh <query>"), fill bang into input so user can type search terms
+    if (item.badge === 'BANG' && item.title.startsWith('!')) {
+      const bangPrefix = item.title.split(' ')[0] + ' ';
+      input.value = bangPrefix;
+      input.focus();
+      performSearch(bangPrefix);
+      return;
+    }
+
     const modifiers = {
       shift: e?.shiftKey,
       alt: e?.altKey,
@@ -491,6 +503,32 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
         }
         if (response && response.results) {
           currentResults = response.results;
+
+          // If query is empty, offer copied clipboard link at the top if present
+          if (!val && navigator.clipboard?.readText) {
+            navigator.clipboard
+              .readText()
+              .then((clipText) => {
+                const trimmed = clipText.trim();
+                if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                  if (!currentResults.some((r) => r.url === trimmed)) {
+                    const clipItem: SearchResult = {
+                      id: 'clipboard-link',
+                      type: 'web',
+                      title: 'Open link from clipboard',
+                      url: trimmed,
+                      description: trimmed,
+                      badge: 'CLIPBOARD',
+                      score: 5000,
+                    };
+                    currentResults = [clipItem, ...currentResults];
+                    renderResults();
+                  }
+                }
+              })
+              .catch(() => {});
+          }
+
           selectedIndex = 0;
           renderResults();
         }

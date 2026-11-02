@@ -3,6 +3,7 @@ import { scoreStringMatch, computeRecencyBonus, computeFrequencyBonus } from './
 import { COMMANDS } from '../commands/registry';
 import { storage } from '../storage';
 import { getFaviconUrl } from '../icons/svg-icons';
+import { matchBang, findMatchingBangs } from './bangs';
 
 export class SearchEngine {
   private isExt(): boolean {
@@ -39,18 +40,72 @@ export class SearchEngine {
   }
 
   /**
-   * Executes a full multi-source search across Open Tabs, Bookmarks, History, TopSites, Commands, and Aliases.
+   * Executes a full multi-source search across Open Tabs, Bookmarks, History, TopSites, Commands, Bangs, and Aliases.
    */
   async search(
     query: string,
     preferences: UserPreferences,
     options?: { context?: 'overlay' | 'newtab'; currentTabId?: number },
   ): Promise<SearchResult[]> {
-    const q = query.trim();
+    const rawQ = query.trim();
     const resultsMap = new Map<string, SearchResult>();
 
-    // 1. Check custom aliases first
-    if (q.length > 0) {
+    // 0. Detect prefix filters:
+    // "!" -> Bang search (!gh, !yt, !w, !so, !r, !npm, !m, !x, etc.)
+    // "@" -> Open tabs only (@portal, @github)
+    // "#" or "*" -> Bookmarks only (#dev, *docs)
+    // "/" -> Browser commands only (/theme, /sleep, /clean)
+    let filterMode: 'all' | 'bangs' | 'tabs' | 'bookmarks' | 'commands' = 'all';
+    let q = rawQ;
+
+    if (rawQ.startsWith('!')) {
+      filterMode = 'bangs';
+    } else if (rawQ.startsWith('@')) {
+      filterMode = 'tabs';
+      q = rawQ.slice(1).trim();
+    } else if (rawQ.startsWith('#') || rawQ.startsWith('*')) {
+      filterMode = 'bookmarks';
+      q = rawQ.slice(1).trim();
+    } else if (rawQ.startsWith('/')) {
+      filterMode = 'commands';
+      q = rawQ.slice(1).trim();
+    }
+
+    // Bang search handling
+    if (filterMode === 'bangs') {
+      const bangMatch = matchBang(rawQ);
+      if (bangMatch && bangMatch.hasQuery) {
+        const targetUrl = bangMatch.bang.urlTemplate.replace('{q}', encodeURIComponent(bangMatch.searchQuery));
+        resultsMap.set('bang-direct', {
+          id: `bang-${bangMatch.bang.prefix}`,
+          type: 'web',
+          title: `Search ${bangMatch.bang.name} for "${bangMatch.searchQuery}"`,
+          url: targetUrl,
+          description: `${bangMatch.bang.description} • Opens in new tab`,
+          favicon: getFaviconUrl(targetUrl),
+          score: 3500,
+          badge: `!${bangMatch.bang.prefix.toUpperCase()}`,
+        });
+      } else {
+        const matching = findMatchingBangs(rawQ);
+        matching.slice(0, preferences.maxSuggestions || 8).forEach((b) => {
+          resultsMap.set(`bang-${b.prefix}`, {
+            id: `bang-${b.prefix}`,
+            type: 'web',
+            title: `!${b.prefix} <query>`,
+            url: b.urlTemplate.replace('{q}', ''),
+            description: `${b.name}: ${b.description}`,
+            favicon: getFaviconUrl(`https://${b.domain}`),
+            score: 2500,
+            badge: 'BANG',
+          });
+        });
+      }
+      return Array.from(resultsMap.values()).slice(0, preferences.maxSuggestions || 10);
+    }
+
+    // 1. Check custom aliases first (only in general search)
+    if (filterMode === 'all' && q.length > 0) {
       const aliases = await storage.getAliases();
       for (const alias of aliases) {
         if (alias.keyword.toLowerCase() === q.toLowerCase()) {
@@ -70,8 +125,8 @@ export class SearchEngine {
       }
     }
 
-    // 2. Direct URL intent
-    if (this.isDirectUrl(q)) {
+    // 2. Direct URL intent (only in general search)
+    if (filterMode === 'all' && this.isDirectUrl(q)) {
       const fullUrl = q.startsWith('http://') || q.startsWith('https://') ? q : `https://${q}`;
       const norm = this.normalizeUrl(fullUrl);
       if (!resultsMap.has(norm)) {
@@ -88,39 +143,43 @@ export class SearchEngine {
       }
     }
 
-    // 3. Search browser commands
-    for (const cmd of COMMANDS) {
-      const titleMatch = scoreStringMatch(q, cmd.title);
-      const descMatch = scoreStringMatch(q, cmd.description);
-      let keywordScore = 0;
-      for (const kw of cmd.keywords) {
-        const kwMatch = scoreStringMatch(q, kw);
-        if (kwMatch.matched) {
-          keywordScore = Math.max(keywordScore, kwMatch.score);
+    // 3. Search browser commands (when in all or commands mode)
+    if (filterMode === 'all' || filterMode === 'commands') {
+      for (const cmd of COMMANDS) {
+        const titleMatch = scoreStringMatch(q, cmd.title);
+        const descMatch = scoreStringMatch(q, cmd.description);
+        let keywordScore = 0;
+        for (const kw of cmd.keywords) {
+          const kwMatch = scoreStringMatch(q, kw);
+          if (kwMatch.matched) {
+            keywordScore = Math.max(keywordScore, kwMatch.score);
+          }
         }
-      }
 
-      const bestScore = Math.max(titleMatch.score, descMatch.score * 0.7, keywordScore);
-      if (bestScore > 120 || (!q && (cmd.id === 'restore-closed-tab' || cmd.id === 'close-duplicates'))) {
-        resultsMap.set(`cmd-${cmd.id}`, {
-          id: `cmd-${cmd.id}`,
-          type: 'command',
-          title: cmd.title,
-          description: cmd.description,
-          score: bestScore > 0 ? bestScore + 150 : 60,
-          commandId: cmd.id,
-          badge: 'COMMAND',
-        });
+        const bestScore = Math.max(titleMatch.score, descMatch.score * 0.7, keywordScore);
+        const isPriorityCmd = cmd.id === 'sleep-inactive-tabs' || cmd.id === 'restore-closed-tab' || cmd.id === 'close-duplicates' || cmd.id === 'toggle-zen-mode';
+        const isDefaultCmd = !q && isPriorityCmd;
+        if (bestScore > 100 || (filterMode === 'commands' && !q) || isDefaultCmd) {
+          const priorityBonus = isPriorityCmd && !q ? 80 : 0;
+          resultsMap.set(`cmd-${cmd.id}`, {
+            id: `cmd-${cmd.id}`,
+            type: 'command',
+            title: cmd.title,
+            description: cmd.description,
+            score: filterMode === 'commands' ? (bestScore > 0 ? bestScore + 500 : 200 + priorityBonus) : (bestScore > 0 ? bestScore + 150 : 60 + priorityBonus),
+            commandId: cmd.id,
+            badge: 'COMMAND',
+          });
+        }
       }
     }
 
-    // 4. Search open tabs
-    if (this.isExt() && chrome.tabs) {
+    // 4. Search open tabs (when in all or tabs mode)
+    if ((filterMode === 'all' || filterMode === 'tabs') && this.isExt() && chrome.tabs) {
       try {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) {
           if (!tab.url || tab.url.startsWith('chrome://newtab')) continue;
-          // In overlay context, omit current tab from tab switcher suggestions
           if (options?.context === 'overlay' && options?.currentTabId && tab.id === options.currentTabId) {
             continue;
           }
@@ -131,8 +190,7 @@ export class SearchEngine {
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
           if (bestMatch > 0 || !q) {
-            // Significant Tab switch bonus when matching
-            const score = bestMatch > 0 ? bestMatch + 350 : 200;
+            const score = filterMode === 'tabs' ? (bestMatch > 0 ? bestMatch + 600 : 300) : (bestMatch > 0 ? bestMatch + 350 : 200);
             const existing = resultsMap.get(norm);
             if (!existing || existing.score < score) {
               resultsMap.set(norm, {
@@ -159,12 +217,12 @@ export class SearchEngine {
       }
     }
 
-    // 5. Search Bookmarks
-    if (this.isExt() && chrome.bookmarks) {
+    // 5. Search Bookmarks (when in all or bookmarks mode)
+    if ((filterMode === 'all' || filterMode === 'bookmarks') && this.isExt() && chrome.bookmarks) {
       try {
         const bookmarks = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
           if (!q) {
-            chrome.bookmarks.getRecent(10, resolve);
+            chrome.bookmarks.getRecent(12, resolve);
           } else {
             chrome.bookmarks.search(q, resolve);
           }
@@ -178,7 +236,7 @@ export class SearchEngine {
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
           if (bestMatch > 0 || !q) {
-            const score = bestMatch > 0 ? bestMatch + 160 : 120;
+            const score = filterMode === 'bookmarks' ? (bestMatch > 0 ? bestMatch + 500 : 250) : (bestMatch > 0 ? bestMatch + 160 : 120);
             const existing = resultsMap.get(norm);
             if (!existing) {
               resultsMap.set(norm, {
@@ -199,6 +257,12 @@ export class SearchEngine {
       } catch (err) {
         console.warn('Error querying bookmarks:', err);
       }
+    }
+
+    // If explicit category filter was specified, return now without mixing history/web search
+    if (filterMode !== 'all') {
+      const sortedFiltered = Array.from(resultsMap.values()).sort((a, b) => b.score - a.score);
+      return sortedFiltered.slice(0, preferences.maxSuggestions || 10);
     }
 
     // 6. Search History
