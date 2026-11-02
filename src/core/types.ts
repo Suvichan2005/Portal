@@ -25,6 +25,17 @@ export interface SearchResult {
   clusterTopic?: string;
   visitCount?: number;
   lastVisitTime?: number;
+  audible?: boolean;
+  muted?: boolean;
+  sessionId?: string;
+}
+
+export interface SavedSession {
+  id: string;
+  name: string;
+  savedAt: number;
+  tabCount: number;
+  tabs: { title: string; url: string; favicon?: string }[];
 }
 
 export interface PinnedShortcut {

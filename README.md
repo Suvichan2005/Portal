@@ -6,17 +6,21 @@
 
 ## Core Capabilities in v1.3.0
 
-- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (**58ms DOM interactive, 3.22MB JS heap**, 0% idle CPU).
+- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (**45.4ms DOM interactive, 3.44MB JS heap**, 0% idle CPU).
 - **Floating Command Palette (`Alt+Q`)**: Press `Alt+Q` on any webpage to instantly summon a floating launcher over the active tab for seamless tab switching, bookmark lookup, web search, and browser actions.
 - **Context-Preserving Search & Navigation**: Searches and links triggered from the floating launcher automatically open in a **new tab**, never replacing or interrupting your current webpage.
 - **Personal Intelligence Briefing**: Surfaces morning priorities, commitments, and schedule previews backed by local projections from Flowmate, tagged by source with real freshness indicators.
+- **Expandable Detailed Briefing Modal**: Full breakdown of strategic priorities, time-sensitive deadlines, unresolved follow-ups, and one-click markdown summary copying.
 - **Important Mail Highlights**: Clean, action-oriented thread highlights with read-only direct Gmail links (`https://mail.google.com/mail/u/0/#inbox/<threadId>`) and an instant **Privacy Preview toggle** to mask snippets when screen sharing.
 - **OpenClaw Activity & Control Center**: Probes local OpenClaw Gateway on loopback (`127.0.0.1:57849`), displays coordinator (IdeaPad) and workstation (ThinkBook) node states, and provides bounded task submission with toast confirmation.
+- **Saved Browsing Session Workspaces**: Snapshot all open tabs in your current window into a named recoverable session (`/save-session`); restore them in a new window with one click (`/restore-session` or search `session`).
+- **Audio Tab Control & Filtering**: Type `@audio` (or `@sound`, `@music`) to isolate playing media tabs. Audio tabs display a prominent `AUDIO 🔊` badge and priority boost; control them via `/switch-to-audio-tab` or `/mute-all-audio-tabs`.
 - **Quick Search Bangs**: Instant DuckDuckGo-style bangs (`!gh` GitHub, `!yt` YouTube, `!w` Wikipedia, `!so` Stack Overflow, `!r` Reddit, `!npm` npm, `!m` Google Maps, `!g` Google, `!x` Twitter, `!ddg` DuckDuckGo) for direct routing.
 - **Category Filter Modifiers**: Filter instantly with prefix keys:
+  - `@audio` strictly isolates playing/audible media tabs
   - `@` strictly isolates open tabs (`@github`, `@portal`)
   - `#` or `*` strictly isolates bookmarks (`#dev`, `*docs`)
-  - `/` strictly isolates browser commands (`/sleep`, `/theme`, `/clip`)
+  - `/` strictly isolates browser commands (`/sleep`, `/theme`, `/clip`, `/save-session`)
 - **Safe Action Acknowledgement**: In-palette notice bar gives immediate visual acknowledgement when commands execute (e.g. "Zen mode enabled", "Tab duplicated") and remains open on errors so you are never left guessing.
 - **User-Initiated Clipboard Privacy**: `/clip` command opens copied URLs safely on demand without intrusive background clipboard snooping.
 - **Inactivity-Gated Tab Memory Suspender**: `/sleep` discards non-active background tabs older than 10 minutes via `chrome.tabs.discard()`; `/sleep-all` forces immediate memory reclamation.
@@ -36,12 +40,12 @@ Measured on a Lenovo IdeaPad (Windows 11, Chrome 156):
 
 | Metric | Native Chrome NTP Baseline | Portal Target Budget | Portal v1.3.0 Result | Status |
 |---|---|---|---|---|
-| **DOM Interactive** | 18.30 ms | < 100 ms | **58.00 ms** | **PASSED** |
-| **DOM Content Loaded** | 18.40 ms | < 120 ms | **83.30 ms** | **PASSED** |
-| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.22 MB** | **EXCEEDED** (< 1/8 native) |
-| **Summon Latency (Overlay)** | N/A | < 200 ms | **103.27 ms** | **PASSED** |
-| **Keypress Latency** | < 16 ms | < 60 ms | **47.84 ms** | **PASSED** |
-| **Extension Bundle Size** | N/A | < 250 KB | **92.4 KB** (total dist) | **EXCEEDED** |
+| **DOM Interactive** | 18.30 ms | < 100 ms | **45.40 ms** | **PASSED** |
+| **DOM Content Loaded** | 18.40 ms | < 120 ms | **67.80 ms** | **PASSED** |
+| **Warm Navigation Average** | ~72.90 ms | < 250 ms | **143.68 ms** | **PASSED** |
+| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.44 MB** | **EXCEEDED** (< 1/8 native) |
+| **Keypress Autocomplete Latency** | < 16 ms | < 60 ms | **53.11 ms** | **PASSED** |
+| **Extension Bundle Size** | N/A | < 250 KB | **94.8 KB** (total dist) | **EXCEEDED** |
 | **Idle Service Worker CPU** | 0% | 0% | **0%** | **PASSED** (Suspends cleanly) |
 
 See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for full benchmark methodology.
@@ -68,7 +72,7 @@ npm run typecheck
 # Build production extension (dist/)
 npm run build
 
-# Run automated Playwright E2E browser test suite (18 tests)
+# Run automated Playwright E2E browser test suite (21 tests)
 npm test
 
 # Run real browser performance benchmark
@@ -80,6 +84,6 @@ npm run benchmark
 ## Architecture & Verification
 - [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md) — Implementation status, audited fixes, and v1.3.0 capabilities.
 - [`docs/DEVICE_TOPOLOGY.md`](docs/DEVICE_TOPOLOGY.md) — Multi-device orchestration topology, IdeaPad coordinator, ThinkBook worker node, security boundaries, and execution classes.
-- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 36-item verification matrix across real browser workflows.
+- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 39-item verification matrix across real browser workflows.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural decision log and trade-off rationale.
 - [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — Detailed latency, memory, and startup measurements.

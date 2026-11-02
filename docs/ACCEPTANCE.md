@@ -45,4 +45,7 @@
 | **33. Important Mail Highlights with Privacy Mode** | `PASSED-REAL` | Verified in Test 16: action-oriented highlights, direct Gmail thread URLs, and preview privacy blur toggle |
 | **34. OpenClaw Control Center & Task Queueing** | `PASSED-REAL` | Verified in Test 17: Gateway indicator (port 57849), IdeaPad & ThinkBook node pills, bounded task submission with toast |
 | **35. Floating Launcher Action Acknowledgement** | `PASSED-REAL` | Verified in Test 18: `#noticeBar` displays action feedback before graceful dismissal; remains open on errors |
-| **36. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. Documented in `docs/DEVICE_TOPOLOGY.md`. |
+| **36. Detailed Morning Briefing Modal Expansion** | `PASSED-REAL` | Verified in Test 19: `#briefingModal` displays strategic priorities, deadlines, follow-ups, and copyable markdown |
+| **37. Saved Browsing Session Workspaces** | `PASSED-REAL` | Verified in Test 20: `/save-session` snapshots window tabs; searchable via `session` query with `SESSION` badge |
+| **38. Audio Tab Isolation & Category Filter** | `PASSED-REAL` | Verified in Test 21: `@audio` isolates audible tabs; badges audible items with `AUDIO 🔊` |
+| **39. Multi-Device OpenClaw Execution Bridge** | `OWNER-ACTION-NEEDED` | IdeaPad session provisioned via `clawctl setup`. ThinkBook node requires owner Tailscale SSH peer setup. Documented in `docs/DEVICE_TOPOLOGY.md`. |

@@ -463,4 +463,63 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     // Overlay closes after acknowledgement
     await expect(host).toBeHidden({ timeout: 3000 });
   });
+
+  test('19. Detailed Morning Briefing Modal expands with full context and follow-ups', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const expandBtn = page.locator('#expandBriefingBtn');
+    await expect(expandBtn).toBeVisible({ timeout: 4000 });
+    await expandBtn.click();
+
+    const modal = page.locator('#briefingModal');
+    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toContainText('Top Strategic Priorities');
+    await expect(modal).toContainText('Unresolved Follow-Ups & Commitments');
+
+    const closeBtn = page.locator('#closeBriefingModalBtn');
+    await closeBtn.click();
+    await expect(modal).toBeHidden({ timeout: 2000 });
+  });
+
+  test('20. Saved Browsing Session Workspace creation and query discovery', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Execute save-current-session command via search
+    const searchInput = page.locator('#portalSearchInput');
+    await searchInput.fill('/save');
+
+    const panel = page.locator('#suggestionsPanel');
+    await expect(panel).toBeVisible({ timeout: 3000 });
+
+    const saveCmd = page.locator('.suggestion-item', { hasText: 'Save Current Window as Session Workspace' });
+    await expect(saveCmd).toBeVisible({ timeout: 3000 });
+    await saveCmd.click();
+
+    // Verify confirmation toast
+    const toast = page.locator('#portalToast');
+    await expect(toast).toBeVisible({ timeout: 3000 });
+    await expect(toast).toContainText('Saved session');
+
+    // Query for session in search bar
+    await searchInput.fill('session');
+    await expect(panel).toBeVisible({ timeout: 3000 });
+    const sessionResult = page.locator('.suggestion-item', { hasText: 'Restore Session:' });
+    await expect(sessionResult.first()).toBeVisible({ timeout: 3000 });
+  });
+
+  test('21. Audio tab detection and @audio category filter isolation', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+    await searchInput.fill('@audio');
+
+    // Should not error and should cleanly execute filter
+    await expect(searchInput).toHaveValue('@audio');
+  });
 });

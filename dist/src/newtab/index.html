@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-CkP9huyg.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/briefing-service-CgxdpHSE.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-BnDptIa0.css">
+  <script type="module" crossorigin src="/assets/newtab-CUOvtN2L.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-B86DupF2.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-BtuoWTwq.css">
 </head>
 <body>
   <!-- Ambient background glow -->
@@ -90,6 +90,7 @@
               <span class="source-pill" id="briefingSourcePill">Flowmate Context</span>
               <span class="freshness-tag" id="briefingFreshnessTag">Updated 35m ago</span>
             </div>
+            <button class="intel-privacy-toggle" id="expandBriefingBtn" title="Open complete detailed morning briefing report">Expand Briefing ↗</button>
           </div>
           <div class="briefing-grid">
             <div class="briefing-col">
@@ -219,6 +220,41 @@
           </div>
           <div class="setting-item action-item">
             <button class="btn danger-btn" id="clearDataBtn">Clear AI Recommendation Cache</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full Detailed Morning Briefing Modal -->
+    <div class="settings-modal-backdrop hidden" id="briefingModal">
+      <div class="settings-dialog briefing-modal-dialog">
+        <div class="settings-header">
+          <h3>Personal Intelligence Morning Briefing</h3>
+          <button class="icon-btn" id="closeBriefingModalBtn">&times;</button>
+        </div>
+        <div class="settings-body briefing-modal-body">
+          <div class="briefing-modal-meta">
+            <span class="source-pill" id="briefingModalSourcePill">Source: Flowmate Context Engine</span>
+            <span class="freshness-tag" id="briefingModalFreshness">Updated 35m ago</span>
+          </div>
+
+          <div class="briefing-modal-section">
+            <h4 class="briefing-subtitle">Top Strategic Priorities</h4>
+            <div id="briefingModalPriorities" class="briefing-modal-list"></div>
+          </div>
+
+          <div class="briefing-modal-section">
+            <h4 class="briefing-subtitle">Time-Sensitive Schedule & Deadlines</h4>
+            <div id="briefingModalSchedule" class="briefing-modal-list"></div>
+          </div>
+
+          <div class="briefing-modal-section">
+            <h4 class="briefing-subtitle">Unresolved Follow-Ups & Commitments</h4>
+            <div id="briefingModalFollowUps" class="briefing-modal-list"></div>
+          </div>
+
+          <div class="briefing-modal-actions">
+            <button class="btn" id="copyBriefingSummaryBtn">Copy Briefing Summary</button>
           </div>
         </div>
       </div>

@@ -65,6 +65,16 @@ class PortalNewTabController {
   private openclawTaskInput!: HTMLInputElement;
   private openclawHostSelect!: HTMLSelectElement;
 
+  // Detailed Briefing Modal Elements
+  private expandBriefingBtn: HTMLElement | null = null;
+  private briefingModal: HTMLElement | null = null;
+  private closeBriefingModalBtn: HTMLElement | null = null;
+  private briefingModalPriorities: HTMLElement | null = null;
+  private briefingModalSchedule: HTMLElement | null = null;
+  private briefingModalFollowUps: HTMLElement | null = null;
+  private copyBriefingSummaryBtn: HTMLElement | null = null;
+  private currentBriefing: PersonalBriefing | null = null;
+
   async init() {
     this.bindDomElements();
     this.setupIcons();
@@ -123,6 +133,15 @@ class PortalNewTabController {
     this.openclawTaskForm = document.getElementById('openclawTaskForm') as HTMLFormElement;
     this.openclawTaskInput = document.getElementById('openclawTaskInput') as HTMLInputElement;
     this.openclawHostSelect = document.getElementById('openclawHostSelect') as HTMLSelectElement;
+
+    // Detailed Briefing Modal Bindings
+    this.expandBriefingBtn = document.getElementById('expandBriefingBtn');
+    this.briefingModal = document.getElementById('briefingModal');
+    this.closeBriefingModalBtn = document.getElementById('closeBriefingModalBtn');
+    this.briefingModalPriorities = document.getElementById('briefingModalPriorities');
+    this.briefingModalSchedule = document.getElementById('briefingModalSchedule');
+    this.briefingModalFollowUps = document.getElementById('briefingModalFollowUps');
+    this.copyBriefingSummaryBtn = document.getElementById('copyBriefingSummaryBtn');
   }
 
   private setupIcons() {
@@ -392,6 +411,19 @@ class PortalNewTabController {
       } else {
         this.showToast(`Task error: ${res.message}`);
       }
+    });
+
+    // Expand Detailed Morning Briefing Modal
+    this.expandBriefingBtn?.addEventListener('click', () => {
+      this.openBriefingModal();
+    });
+
+    this.closeBriefingModalBtn?.addEventListener('click', () => {
+      this.briefingModal?.classList.add('hidden');
+    });
+
+    this.copyBriefingSummaryBtn?.addEventListener('click', () => {
+      this.copyBriefingSummary();
     });
 
     // Settings checkboxes
@@ -1035,6 +1067,7 @@ class PortalNewTabController {
   }
 
   private renderBriefing(briefing: PersonalBriefing) {
+    this.currentBriefing = briefing;
     if (this.briefingFreshnessTag) {
       const minsAgo = Math.max(1, Math.round((Date.now() - briefing.generatedAt) / (1000 * 60)));
       this.briefingFreshnessTag.textContent = `Updated ${minsAgo}m ago • ${briefing.status.toUpperCase()}`;
@@ -1072,6 +1105,90 @@ class PortalNewTabController {
         `;
         this.briefingScheduleList.appendChild(li);
       });
+    }
+  }
+
+  private openBriefingModal() {
+    if (!this.briefingModal || !this.currentBriefing) return;
+    this.briefingModal.classList.remove('hidden');
+
+    const b = this.currentBriefing;
+    const minsAgo = Math.max(1, Math.round((Date.now() - b.generatedAt) / (1000 * 60)));
+    const freshnessEl = document.getElementById('briefingModalFreshness');
+    if (freshnessEl) {
+      freshnessEl.textContent = `Updated ${minsAgo}m ago • ${b.status.toUpperCase()}`;
+    }
+
+    if (this.briefingModalPriorities) {
+      this.briefingModalPriorities.innerHTML = '';
+      b.topPriorities.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'briefing-item';
+        el.innerHTML = `
+          <div class="briefing-item-title">
+            <span>${this.escapeHtml(item.title)}</span>
+            <span class="source-pill">${this.escapeHtml(item.source)}</span>
+          </div>
+          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+        `;
+        this.briefingModalPriorities!.appendChild(el);
+      });
+    }
+
+    if (this.briefingModalSchedule) {
+      this.briefingModalSchedule.innerHTML = '';
+      b.upcomingCommitments.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'briefing-item';
+        el.innerHTML = `
+          <div class="briefing-item-title">
+            <span>${this.escapeHtml(item.title)}</span>
+            ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
+          </div>
+          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+        `;
+        this.briefingModalSchedule!.appendChild(el);
+      });
+    }
+
+    if (this.briefingModalFollowUps) {
+      this.briefingModalFollowUps.innerHTML = '';
+      b.followUps.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'briefing-item';
+        el.innerHTML = `
+          <div class="briefing-item-title">
+            <span>${this.escapeHtml(item.title)}</span>
+            <span class="briefing-due-badge">${this.escapeHtml(item.priority.toUpperCase())}</span>
+          </div>
+          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+        `;
+        this.briefingModalFollowUps!.appendChild(el);
+      });
+    }
+  }
+
+  private async copyBriefingSummary() {
+    if (!this.currentBriefing) return;
+    const b = this.currentBriefing;
+    const lines = [
+      `# Morning Command Briefing (${new Date(b.generatedAt).toLocaleDateString()})`,
+      `Source: ${b.sourceIdentity} • Status: ${b.status}`,
+      '',
+      '## Top Priorities',
+      ...b.topPriorities.map((p) => `- [ ] **${p.title}**: ${p.summary}`),
+      '',
+      '## Upcoming Schedule',
+      ...b.upcomingCommitments.map((c) => `- **${c.dueTime || 'Today'}**: ${c.title} — ${c.summary}`),
+      '',
+      '## Follow-Ups',
+      ...b.followUps.map((f) => `- [ ] ${f.title}: ${f.summary}`),
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      this.showToast('Briefing markdown copied to clipboard');
+    } catch {
+      this.showToast('Failed to copy to clipboard');
     }
   }
 

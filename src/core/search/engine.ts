@@ -52,14 +52,18 @@ export class SearchEngine {
 
     // 0. Detect prefix filters:
     // "!" -> Bang search (!gh, !yt, !w, !so, !r, !npm, !m, !x, etc.)
+    // "@audio", "@sound", "@music" -> Audible playing tabs only
     // "@" -> Open tabs only (@portal, @github)
     // "#" or "*" -> Bookmarks only (#dev, *docs)
     // "/" -> Browser commands only (/theme, /sleep, /clean)
-    let filterMode: 'all' | 'bangs' | 'tabs' | 'bookmarks' | 'commands' = 'all';
+    let filterMode: 'all' | 'bangs' | 'tabs' | 'audio' | 'bookmarks' | 'commands' = 'all';
     let q = rawQ;
 
     if (rawQ.startsWith('!')) {
       filterMode = 'bangs';
+    } else if (rawQ.startsWith('@audio') || rawQ.startsWith('@sound') || rawQ.startsWith('@music')) {
+      filterMode = 'audio';
+      q = rawQ.replace(/^@(audio|sound|music)/i, '').trim();
     } else if (rawQ.startsWith('@')) {
       filterMode = 'tabs';
       q = rawQ.slice(1).trim();
@@ -180,12 +184,13 @@ export class SearchEngine {
       }
     }
 
-    // 4. Search open tabs (when in all or tabs mode)
-    if ((filterMode === 'all' || filterMode === 'tabs') && this.isExt() && chrome.tabs) {
+    // 4. Search open tabs (when in all, tabs, or audio mode)
+    if ((filterMode === 'all' || filterMode === 'tabs' || filterMode === 'audio') && this.isExt() && chrome.tabs) {
       try {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) {
           if (!tab.url || tab.url.startsWith('chrome://newtab')) continue;
+          if (filterMode === 'audio' && !tab.audible) continue;
           if (options?.context === 'overlay' && options?.currentTabId && tab.id === options.currentTabId) {
             continue;
           }
@@ -195,8 +200,14 @@ export class SearchEngine {
           const urlMatch = scoreStringMatch(q, tab.url);
           const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
-          if (bestMatch > 0 || !q) {
-            const score = filterMode === 'tabs' ? (bestMatch > 0 ? bestMatch + 600 : 300) : (bestMatch > 0 ? bestMatch + 350 : 200);
+          if (bestMatch > 0 || !q || filterMode === 'audio') {
+            const audioBonus = tab.audible ? 180 : 0;
+            const score = filterMode === 'audio'
+              ? 850 + (bestMatch > 0 ? bestMatch : 0)
+              : filterMode === 'tabs'
+                ? (bestMatch > 0 ? bestMatch + 600 : 300) + audioBonus
+                : (bestMatch > 0 ? bestMatch + 350 : 200) + audioBonus;
+
             const existing = resultsMap.get(norm);
             if (!existing || existing.score < score) {
               resultsMap.set(norm, {
@@ -204,23 +215,47 @@ export class SearchEngine {
                 type: 'tab',
                 title: tab.title || tab.url,
                 url: tab.url,
-                description: `Open tab • ${new URL(tab.url).hostname}`,
+                description: tab.audible ? `Playing audio 🔊 • ${new URL(tab.url).hostname}` : `Open tab • ${new URL(tab.url).hostname}`,
                 favicon: tab.favIconUrl || getFaviconUrl(tab.url),
                 score,
                 tabId: tab.id,
                 windowId: tab.windowId,
-                badge: 'SWITCH TAB',
+                badge: tab.audible ? 'AUDIO 🔊' : 'SWITCH TAB',
+                audible: tab.audible,
+                muted: tab.mutedInfo?.muted,
               });
             } else if (existing) {
-              existing.badge = 'OPEN TAB';
+              existing.badge = tab.audible ? 'AUDIO 🔊' : 'OPEN TAB';
               existing.tabId = tab.id;
               existing.windowId = tab.windowId;
+              existing.audible = tab.audible;
             }
           }
         }
       } catch (err) {
-        console.warn('Error querying tabs:', err);
+        console.warn('[SearchEngine] Open tabs query error:', err);
       }
+    }
+
+    // 4.5 Search saved sessions (when query mentions session or in commands mode)
+    if (q.toLowerCase().includes('session') || filterMode === 'commands') {
+      try {
+        const sessions = await storage.getSavedSessions();
+        for (const s of sessions) {
+          const match = scoreStringMatch(q, s.name);
+          if (match.score > 0 || q.toLowerCase().includes('session')) {
+            resultsMap.set(`saved-${s.id}`, {
+              id: `saved-${s.id}`,
+              type: 'command',
+              title: `Restore Session: ${s.name}`,
+              description: `Saved workspace with ${s.tabCount} tab(s) • ${new Date(s.savedAt).toLocaleDateString()}`,
+              score: 280 + (match.score > 0 ? match.score : 40),
+              commandId: 'restore-saved-session',
+              badge: 'SESSION',
+            });
+          }
+        }
+      } catch {}
     }
 
     // 5. Search Bookmarks (when in all or bookmarks mode)

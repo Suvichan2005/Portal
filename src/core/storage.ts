@@ -7,6 +7,7 @@ import {
   PersonalBriefing,
   ImportantMailSnapshot,
   OpenClawSystemStatus,
+  SavedSession,
 } from './types';
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -34,6 +35,7 @@ const STORAGE_KEYS = {
   BRIEFING: 'portal_cached_briefing',
   MAIL_SNAPSHOT: 'portal_cached_mail',
   OPENCLAW_STATUS: 'portal_cached_openclaw',
+  SESSIONS: 'portal_saved_sessions',
 } as const;
 
 class StorageService {
@@ -321,6 +323,55 @@ class StorageService {
       });
     }
     localStorage.setItem(STORAGE_KEYS.OPENCLAW_STATUS, JSON.stringify(status));
+  }
+
+  // --- Saved Browsing Workspaces & Recoverable Sessions ---
+  async getSavedSessions(): Promise<SavedSession[]> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.SESSIONS], (result) => {
+          resolve(result[STORAGE_KEYS.SESSIONS] || []);
+        });
+      });
+    }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async saveSession(name: string, tabs: { title: string; url: string; favicon?: string }[]): Promise<SavedSession> {
+    const existing = await this.getSavedSessions();
+    const session: SavedSession = {
+      id: `session-${Date.now()}`,
+      name: name.trim() || `Session ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      savedAt: Date.now(),
+      tabCount: tabs.length,
+      tabs,
+    };
+    const updated = [session, ...existing].slice(0, 20);
+    if (this.isExtensionEnvironment()) {
+      await new Promise<void>((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
+      });
+    } else {
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
+    }
+    return session;
+  }
+
+  async deleteSavedSession(id: string): Promise<void> {
+    const existing = await this.getSavedSessions();
+    const updated = existing.filter((s) => s.id !== id);
+    if (this.isExtensionEnvironment()) {
+      await new Promise<void>((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
+      });
+    } else {
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
+    }
   }
 }
 

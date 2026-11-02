@@ -391,4 +391,95 @@ export const COMMANDS: BrowserCommand[] = [
       return { success: true };
     },
   },
+  {
+    id: 'switch-to-audio-tab',
+    title: 'Switch to Playing / Audio Tab',
+    description: 'Jump immediately to the background tab currently producing sound',
+    category: 'tabs',
+    keywords: ['audio', 'music', 'sound', 'playing', 'media', 'speaker', 'youtube', 'spotify'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false, message: 'Tabs API not available' };
+      const audibleTabs = await chrome.tabs.query({ audible: true });
+      if (audibleTabs.length === 0) {
+        return { success: false, message: 'No tabs are currently playing audio' };
+      }
+      const target = audibleTabs[0];
+      if (target.id) {
+        await chrome.tabs.update(target.id, { active: true });
+        if (target.windowId && chrome.windows) {
+          await chrome.windows.update(target.windowId, { focused: true });
+        }
+        return { success: true, message: `Switched to: ${target.title || 'Audio tab'}` };
+      }
+      return { success: false, message: 'Could not switch to audio tab' };
+    },
+  },
+  {
+    id: 'mute-all-audio-tabs',
+    title: 'Mute / Unmute Playing Tabs',
+    description: 'Toggle mute status on all tabs currently playing audio',
+    category: 'tabs',
+    keywords: ['mute', 'silence', 'sound', 'audio', 'quiet', 'stop', 'pause'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs) return { success: false, message: 'Tabs API not available' };
+      const audibleTabs = await chrome.tabs.query({ audible: true });
+      if (audibleTabs.length === 0) {
+        const mutedTabs = await chrome.tabs.query({ muted: true });
+        if (mutedTabs.length > 0) {
+          for (const tab of mutedTabs) {
+            if (tab.id) await chrome.tabs.update(tab.id, { muted: false });
+          }
+          return { success: true, message: `Unmuted ${mutedTabs.length} tab(s)` };
+        }
+        return { success: false, message: 'No tabs playing audio to mute' };
+      }
+      for (const tab of audibleTabs) {
+        if (tab.id) await chrome.tabs.update(tab.id, { muted: true });
+      }
+      return { success: true, message: `Muted ${audibleTabs.length} audio tab(s)` };
+    },
+  },
+  {
+    id: 'save-current-session',
+    title: 'Save Current Window as Session Workspace',
+    description: 'Snapshot all open tabs in this window as a recoverable session',
+    category: 'tabs',
+    keywords: ['save', 'session', 'workspace', 'backup', 'snapshot', 'store'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.windows) return { success: false, message: 'Tabs API not available' };
+      const currentWindow = await chrome.windows.getCurrent();
+      if (!currentWindow?.id) return { success: false, message: 'No current window' };
+      const tabs = await chrome.tabs.query({ windowId: currentWindow.id });
+      const validTabs = tabs
+        .filter((t) => t.url && !t.url.startsWith('chrome://newtab'))
+        .map((t) => ({
+          title: t.title || t.url || 'Tab',
+          url: t.url!,
+          favicon: t.favIconUrl,
+        }));
+      if (validTabs.length === 0) {
+        return { success: false, message: 'No active tabs to save in this window' };
+      }
+      const saved = await storage.saveSession('', validTabs);
+      return { success: true, message: `Saved session "${saved.name}" (${saved.tabCount} tabs)` };
+    },
+  },
+  {
+    id: 'restore-saved-session',
+    title: 'Restore Most Recent Saved Session',
+    description: 'Reopen all tabs from your last saved session workspace in a new window',
+    category: 'tabs',
+    keywords: ['restore', 'session', 'reopen', 'recover', 'workspace', 'load'],
+    execute: async () => {
+      if (typeof chrome === 'undefined' || !chrome.windows) return { success: false, message: 'Windows API not available' };
+      const sessions = await storage.getSavedSessions();
+      if (sessions.length === 0) {
+        return { success: false, message: 'No saved sessions found. Use "Save Current Window as Session Workspace" first.' };
+      }
+      const latest = sessions[0];
+      const urls = latest.tabs.map((t) => t.url);
+      await chrome.windows.create({ url: urls });
+      return { success: true, message: `Restored session "${latest.name}" (${urls.length} tabs)` };
+    },
+  },
 ];

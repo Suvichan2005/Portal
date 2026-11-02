@@ -101,3 +101,21 @@
 - **Alternative Rejected:** Blind immediate dismissal on click.
 - **Impact:** Eliminates phantom actions and gives the user real visual certainty that commands executed successfully.
 
+## DEC-017: Saved Browsing Session Workspaces
+- **Context:** Daily browser workflows involve grouping tabs for specific projects or research tasks, but heavy third-party session extensions consume significant memory and inject remote trackers.
+- **Decision:** Implement lightweight native session snapshots in `chrome.storage.local`. Commands `/save-session` and `/restore-session` capture current window tab URLs and titles, allowing instant restoration in a clean window. Saved sessions are automatically indexed in the omni-search engine with the `SESSION` badge.
+- **Alternative Rejected:** Heavy third-party session manager extensions or syncing complete DOM trees.
+- **Impact:** Zero-overhead session preservation and recovery using native browser primitives.
+
+## DEC-018: Audio Tab State & Native Media Introspection
+- **Context:** When dozens of tabs are open across multiple windows, finding which tab is playing audio or making noise is a major friction point.
+- **Decision:** Query `tab.audible` directly via Chrome's native tabs API. Add `@audio` / `@sound` filter modifier to isolate playing tabs, badge audible tabs with `AUDIO 🔊` and a score bonus in search results, and provide commands `switch-to-audio-tab` and `mute-all-audio-tabs`.
+- **Alternative Rejected:** Polling web audio contexts from content scripts.
+- **Impact:** Instant one-keystroke identification and control of media-producing tabs with zero content script overhead.
+
+## DEC-019: Expandable Detailed Briefing Projection Modal
+- **Context:** The compact morning briefing on the homepage surfaces top priorities, but users also need access to time-sensitive schedules, overdue follow-ups, and copyable markdown without cluttering the minimal homepage.
+- **Decision:** Add an "Expand Briefing" action opening a lightweight, bounded modal (`#briefingModal`) with the full structured Flowmate projection and a one-click "Copy Briefing Summary" button.
+- **Alternative Rejected:** Expanding the briefing inline on the homepage (violates minimal text-forward homepage contract).
+- **Impact:** Rich context available on demand without expanding default homepage footprint or load time.
+

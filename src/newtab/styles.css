@@ -648,6 +648,39 @@ body {
   overflow: hidden;
 }
 
+.briefing-modal-dialog {
+  width: 620px;
+}
+
+.briefing-modal-body {
+  gap: 16px;
+}
+
+.briefing-modal-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.briefing-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.briefing-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.briefing-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
 .settings-header {
   display: flex;
   justify-content: space-between;
