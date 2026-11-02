@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-CUOvtN2L.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/briefing-service-B86DupF2.js">
+  <script type="module" crossorigin src="/assets/newtab-CvNwAVj9.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-am8G1S-L.js">
   <link rel="stylesheet" crossorigin href="/assets/newtab-BtuoWTwq.css">
 </head>
 <body>
@@ -87,10 +87,13 @@
         <div class="intel-panel" id="briefingPanel">
           <div class="intel-header-row">
             <div class="intel-source-meta" id="briefingMeta">
-              <span class="source-pill" id="briefingSourcePill">Flowmate Context</span>
-              <span class="freshness-tag" id="briefingFreshnessTag">Updated 35m ago</span>
+              <span class="source-pill" id="briefingSourcePill">Unconfigured</span>
+              <span class="freshness-tag" id="briefingFreshnessTag">Not connected</span>
             </div>
-            <button class="intel-privacy-toggle" id="expandBriefingBtn" title="Open complete detailed morning briefing report">Expand Briefing ↗</button>
+            <div style="display:flex; gap:6px;">
+              <button class="intel-privacy-toggle" id="importBriefingBtn" title="Import Flowmate or journal briefing">Import Briefing</button>
+              <button class="intel-privacy-toggle" id="expandBriefingBtn" title="Open complete detailed morning briefing report">Expand Briefing ↗</button>
+            </div>
           </div>
           <div class="briefing-grid">
             <div class="briefing-col">
@@ -260,13 +263,30 @@
       </div>
     </div>
 
+    <!-- Import Personal Briefing Modal -->
+    <div class="settings-modal-backdrop hidden" id="importBriefingModal">
+      <div class="settings-dialog">
+        <div class="settings-header">
+          <h3>Import Personal Briefing Projection</h3>
+          <button class="icon-btn" id="closeImportModalBtn">&times;</button>
+        </div>
+        <div class="settings-body">
+          <div class="setting-desc">Paste structured Markdown or JSON from Flowmate, ChatGPT Morning Command Briefing, or your personal daily journal.</div>
+          <textarea id="briefingImportText" style="width:100%; height:160px; background:var(--input-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:10px; font-family:monospace; font-size:12px; resize:vertical;" placeholder="# Daily Morning Briefing&#10;## Top Priorities&#10;- [ ] Complete release audit: verify zero fake data&#10;## Upcoming Schedule&#10;- 2:00 PM: Project Review"></textarea>
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button class="btn" id="submitImportBtn">Import & Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification for Actions & Commands -->
     <div class="portal-toast hidden" id="portalToast"></div>
 
     <!-- Minimal Footer -->
     <footer class="portal-footer">
       <span class="footer-hint">Press <span class="kbd">Alt+Q</span> for Floating Palette on any page</span>
-      <span class="footer-status" id="footerStatus">Portal v1.3.0</span>
+      <span class="footer-status" id="footerStatus">Portal v1.3.1</span>
     </footer>
   </div>
 

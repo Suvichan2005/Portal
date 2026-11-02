@@ -119,3 +119,27 @@
 - **Alternative Rejected:** Expanding the briefing inline on the homepage (violates minimal text-forward homepage contract).
 - **Impact:** Rich context available on demand without expanding default homepage footprint or load time.
 
+
+## DEC-020: Strict Source Integrity & Elimination of Synthetic Production Data
+- **Context:** Earlier versions populated empty caches with plausible-looking hardcoded seed items (fake recruiter emails, mock calendar meetings, and simulated OpenClaw completed jobs). Refreshing advanced timestamps on fabricated content, misleading users into believing live connections existed.
+- **Decision:** Strictly ban fabricated production fixtures in production source code. Default states for unconfigured services must return 0 items and honest status indicators (`unconfigured`, `disconnected`, `offline`, `unpaired`). Never advance source observation timestamps (`generatedAt`, `lastChecked`) during refresh unless actual data was fetched from a live provider.
+- **Alternative Rejected:** Keeping demo data to make the UI look populated on initial install.
+- **Impact:** Total integrity and transparency. Portal never misleads the user about the reality of external integrations or automated actions.
+
+## DEC-021: Zero-Network NTP Load Isolation
+- **Context:** Opening a new tab must feel instantaneous and consume zero network bandwidth. Probing loopback ports or remote APIs during NTP page load adds latency, risks timeouts, and violates the core lightweight mandate.
+- **Decision:** Enforce a strict architectural split between `getCachedStatus()` and live network probes (`probeGateway()`). During ordinary New Tab page loads, Portal reads solely from local storage caches (`chrome.storage.local`). Probes of `127.0.0.1:57849` or external endpoints occur ONLY during explicit user-initiated actions (clicking the refresh button or submitting a task).
+- **Alternative Rejected:** Probing local daemon health on every New Tab open.
+- **Impact:** Verified 0 loopback/external network requests on cold NTP open. Sub-30ms DOM interactive time preserved.
+
+## DEC-022: Targeted Storage Migration Engine
+- **Context:** Existing installations might have persisted previous synthetic demo seeds (`prio-1`, `comm-1`, `mail-1`, `job-101`) in their local extension storage. Wiping all storage indiscriminately would destroy legitimate user pinned shortcuts, custom theme settings, and saved session workspaces.
+- **Decision:** Implement `runStorageMigration()` in `src/core/migration.ts`. The migration inspects cached entities for known seed signatures and purges ONLY the synthetic items, retaining all legitimate user shortcuts, sessions, and configuration untouched.
+- **Alternative Rejected:** Calling `chrome.storage.local.clear()` on upgrade.
+- **Impact:** Flawless backward compatibility and clean purge of old mock data without user disruption.
+
+## DEC-023: User-Initiated Briefing Ingestion via Structured Markdown/JSON
+- **Context:** Before an automated Flowmate sync daemon or local companion is paired, users still want to populate their morning command surface with their real daily priorities and tasks.
+- **Decision:** Provide an explicit "Import Briefing" button and modal dialog (`#importBriefingModal`). The parser supports standard Markdown bullet lists (with optional task checkboxes `[ ]` / `[x]`) and structured JSON, validating items before storing them locally.
+- **Alternative Rejected:** Requiring users to configure external API tokens or wait for daemon pairing.
+- **Impact:** Immediate utility on clean installs without sacrificing offline-first principles or data integrity.

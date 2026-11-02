@@ -1,70 +1,72 @@
 # PORTAL Build State
 
-**Version:** 1.3.0  
-**Last Updated:** 2026-11-02 15:20 UTC+5:30  
-**Phase:** 8 — Personal Intelligence, Context & Device Orchestration Release  
+**Version:** 1.3.1  
+**Last Updated:** 2026-11-02 16:45 UTC+5:30  
+**Phase:** 9 — Source Integrity, Truthful Connectivity & Release Correction  
 **Branch:** feature/portal-next-level  
 **Remote:** https://github.com/Suvichan2005/Portal  
 
-## Release Overview: v1.3.0
+## Release Overview: v1.3.1
 
-Portal v1.3.0 expands the ultra-lightweight browser launcher into a unified, secure personal command surface integrating Flowmate personal context and OpenClaw multi-node execution, while strictly preserving zero-network-overhead New Tab responsiveness (45.4ms DOM interactive, 3.44MB RAM, 0% idle CPU).
+Portal v1.3.1 directly addresses and resolves the source-integrity and simulation findings identified in the v1.3.0 audit. It purges all synthetic demo fixtures from production caches, eliminates false execution claims, implements an honest local task rejection and status pipeline, guarantees zero network requests on New Tab open, and adds genuine user-controlled Markdown/JSON briefing importing.
 
-### 1. 10 Corrected Audit Findings
-1. **Manifest Version Alignment**: Synchronized `manifest.json`, `package.json`, and all UI footers to `v1.3.0`.
-2. **Overlay Premature Dismissal**: Floating launcher now awaits service worker acknowledgement before dismissing. Displays action notices (e.g. "Zen mode enabled", "Tab duplicated") in an integrated notice bar; stays open on failures.
-3. **Inactivity Threshold for Tab Suspension**: `sleep-inactive-tabs` now enforces a 10-minute inactivity threshold (`now - tab.lastAccessed >= 10m`), preventing active workflow interruption. Added `force-sleep-all-tabs` for immediate unconditioned tab sleep.
-4. **User-Initiated Clipboard Privacy**: Removed automatic clipboard snooping on window focus. Surfaced explicit user-triggered command `open-clipboard-url` (`/clip`) and added an opt-in toggle in settings.
-5. **Zen Mode Document Independence**: `toggle-zen-mode` now safely persists state to `chrome.storage.local` across both service worker and page contexts without runtime DOM reference errors.
-6. **Settings Dialog Viewport Containment**: Modal dialog bounded with `max-height: 85vh` and scrollable content area, ensuring close button (`#closeSettingsBtn`) is always reachable.
-7. **Notice Bar Shadow DOM Identification**: Added explicit `noticeBar.id = 'noticeBar'` for robust component querying and test stability.
-8. **Real Service Worker Command Authority**: Verified background execution with `Duplicate Current Tab` and `Restore Closed Tab` using real Chrome tab and session APIs.
-9. **Zero-NTP Overhead Invariant**: Verified zero live external requests or LLM execution on New Tab open. All intelligence is read synchronously from bounded local cache (`chrome.storage.local`).
-10. **Device Topology Documentation**: Fully authored `docs/DEVICE_TOPOLOGY.md` with verified IdeaPad vs ThinkBook execution classes, loopback isolation, and port assignments.
+### 1. Critical Source Integrity & Execution Corrections
+1. **Purged Simulated Production Data**:
+   - Eliminated fabricated recruiter emails, fake calendar meetings, and fake Flowmate priorities from `briefing-service.ts`.
+   - Default state on clean profile or unconfigured source contains exactly 0 items with honest `unconfigured` status.
+2. **Purged Fake OpenClaw Job History & Completed Status**:
+   - Removed synthetic jobs (`job-101`, `job-aud-01`) and mock coordinator success claims from `openclaw-bridge.ts`.
+   - The jobs list displays "No automation jobs recorded." until genuine tasks are executed.
+3. **Targeted Storage Migration Engine (`src/core/migration.ts`)**:
+   - Safe migration scanning for known seed signatures (`prio-1`, `comm-1`, `mail-1`, `job-101`).
+   - Automatically purges historical fixture seeds without touching user shortcuts, saved sessions, or preferences.
+4. **Frozen Source Observation Timestamps**:
+   - In `BriefingService.refreshAll()`, source observation timestamps (`generatedAt`, `lastChecked`) are NEVER advanced on refresh unless genuine live source data was fetched.
+   - Separated observation time from cache access time (`lastCachedAt`).
+5. **Cold-Load Zero Network Invariant Guaranteed**:
+   - Separated `getCachedStatus()` (reads local cache in 0ms, 0 network) from `probeGateway()` (explicit network probe).
+   - Ordinary New Tab opens generate **0 loopback or external network requests**, verified via Playwright request monitoring.
+6. **Honest Host & Workstation Connectivity**:
+   - IdeaPad coordinator correctly reflects actual host daemon status (`offline` when Gateway is stopped).
+   - ThinkBook workstation is truthfully displayed as `UNPAIRED (Requires Tailscale SSH setup)` rather than misleading standby.
+7. **Strict Task Execution Verification**:
+   - `submitTask()` verifies actual runner connectivity via port 57849 probe.
+   - When the Gateway service is stopped, requests are honestly rejected with actionable error messages (`"OpenClaw Gateway is not running on 127.0.0.1:57849. Start with 'clawctl gateway-service start'"`), recording a truthful `rejected` job rather than fabricating task queueing.
+8. **User-Initiated Briefing Import Workflow**:
+   - Added user-facing "Import Briefing" button (`#importBriefingBtn`) and modal dialog.
+   - Supports importing personal priorities and tasks from Markdown bullet lists or JSON structures, populating the briefing surface with genuine user content.
+9. **Canonical Gmail Thread URL Sanitization**:
+   - Replaced plain string concatenation with strict hex/alphanumeric sanitization (`BriefingService.buildGmailThreadUrl`) enforcing canonical `https://mail.google.com/mail/u/0/#inbox/<sanitizedId>` links.
+10. **Resilient In-Memory Storage Fallback**:
+    - Enhanced `StorageService` with in-memory fallback mechanisms to ensure graceful execution across Node.js test runners, background service workers, and page contexts without runtime DOM errors.
 
-### 2. Capabilities Delivered in v1.3.0
-- **Personal Intelligence Briefing**:
-  - Compact morning preview of top priorities, schedule preview, and commitments.
-  - Source tags (`flowmate:work`, `calendar:personal`, `project:portal`) and real freshness indicator (`Updated 12m ago`).
-  - **Expandable Detailed Briefing Modal**: Full breakdown of strategic priorities, time-sensitive deadlines, unresolved follow-ups, and one-click markdown summary copying.
-  - Powered by local projection caching in `src/core/intelligence/briefing-service.ts`.
-- **Important Mail Highlights**:
-  - Action-oriented thread highlights with sender, subject, summary, and direct read-only links (`https://mail.google.com/mail/u/0/#inbox/<threadId>`).
-  - Privacy Preview toggle hiding sensitive email snippets on shared or mirrored screens.
-  - Strictly read-only navigation — zero automated email sending from Portal.
-- **OpenClaw Activity & Control Center**:
-  - Local Gateway health indicator communicating exclusively over loopback (`127.0.0.1:57849/health`).
-  - Node topology monitoring showing IdeaPad coordinator (`A9-T7`, active) and ThinkBook workstation (`tb-heavy-01`, standby).
-  - Bounded task submission interface with local queue confirmation toast.
-  - Direct dashboard shortcut command (`/openclaw-status`).
-- **Saved Browsing Session Workspaces**:
-  - Save all open tabs in the active window into a named recoverable workspace (`/save-session`).
-  - Restore saved workspaces in a clean new window with one click or search query (`/restore-session`).
-  - Live discovery of saved sessions via the search bar (`session`).
-- **Audible Tab Isolation & Control**:
-  - Exclusive `@audio` (or `@sound`, `@music`) category filter to instantly find tabs playing media.
-  - Special `AUDIO 🔊` badge on audible tabs in search results with priority ranking bonus.
-  - Commands: `Switch to Playing / Audio Tab` and `Mute / Unmute Playing Tabs`.
-- **Device Topology & Security**:
-  - Loopback-only bridge binding (`127.0.0.1:57849`). Zero remote token exposure in browser bundles.
-  - Documented execution classes (Class A/B/C) delineating Portal, Flowmate, and OpenClaw responsibilities.
+---
 
 ## Quality & Verification Status
 
 | Verification Area | Result | Notes |
 | :--- | :--- | :--- |
-| **Playwright E2E Suite** | **21 of 21 PASSED** | Ran against real unpacked Chrome MV3 extension |
-| **TypeScript Typecheck** | **0 errors** | Strict mode enforced across core, overlay, newtab, sw |
-| **Bundle Footprint** | **<95 KB** | Full extension build well under 250 KB budget |
-| **Idle CPU Impact** | **0%** | Zero background polling, purely event-driven |
+| **Unit Test Suite (`tests/unit`)** | **12 of 12 PASSED** | Verified seed purging, timestamp freezing, markdown import, URL sanitization, task rejection |
+| **Playwright E2E Suite (`tests/e2e`)** | **22 of 22 PASSED** | Ran against real unpacked Chrome MV3 extension in Chromium |
+| **Total Test Verification** | **34 of 34 PASSED** | Zero skipped, zero failures (1.2m full run) |
+| **TypeScript Typecheck** | **0 errors** | Strict mode enforced across core, overlay, newtab, service worker |
+| **Network Zero-Overhead Test** | **PASSED (0 reqs)** | Verified cold New Tab open produces 0 non-extension requests |
+| **Bundle Footprint** | **<96 KB total** | Service worker (6.06 KB), overlay (13.63 KB), newtab (33.95 KB) |
+| **Idle CPU Overhead** | **0%** | Zero polling, purely event-driven architecture |
 
-## Measured Performance (v1.3.0 vs Native NTP Baseline)
+---
 
-| Metric | Native NTP Baseline | Portal v1.3.0 | Target Contract | Status |
+## Measured Performance (v1.3.1 vs Native NTP Baseline)
+
+| Metric | Native NTP Baseline | Portal v1.3.1 Measured | Target Contract | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **DOM Interactive** | 18.30 ms | **45.40 ms** | < 100 ms | **PASSED** |
-| **DOM Content Loaded** | 18.40 ms | **67.80 ms** | < 120 ms | **PASSED** |
-| **JS Heap Memory** | ~28.00 MB | **3.44 MB** | < 38 MB | **PASSED** (<1/8 native) |
-| **Warm Navigation Average** | ~72.90 ms | **143.68 ms** | < 250 ms | **PASSED** |
-| **Keypress Latency** | N/A | **53.11 ms** | < 60 ms | **PASSED** |
+| **DOM Interactive** | 18.30 ms | **28.40 ms** | < 100 ms | **PASSED** |
+| **DOM Content Loaded** | 18.40 ms | **61.40 ms** | < 120 ms | **PASSED** |
+| **Load Event** | ~20.00 ms | **63.90 ms** | < 150 ms | **PASSED** |
+| **JS Heap Memory** | ~28.00 MB | **3.20 MB** | < 38 MB | **PASSED** (~1/9 native) |
+| **Cold Navigation** | 242.34 ms | **257.38 ms** | < 350 ms | **PASSED** |
+| **Warm Navigation Average** | 72.90 ms | **175.70 ms** | < 250 ms | **PASSED** |
+| **Keypress Latency** | N/A | **45.95 ms** | < 60 ms | **PASSED** |
+| **Summon Latency** | N/A | **116.12 ms** | < 150 ms | **PASSED** |
+| **Cold NTP Network Requests**| 0 external | **0 external / 0 loopback** | 0 requests | **PASSED** |
 | **Idle Background CPU** | 0% | **0%** | 0% | **PASSED** |

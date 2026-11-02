@@ -15,6 +15,7 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 import { COMMANDS } from '../core/commands/registry';
 import { briefingService } from '../core/intelligence/briefing-service';
 import { openClawBridge } from '../core/bridge/openclaw-bridge';
+import { runStorageMigration } from '../core/migration';
 
 class PortalNewTabController {
   private prefs: UserPreferences = {
@@ -75,7 +76,16 @@ class PortalNewTabController {
   private copyBriefingSummaryBtn: HTMLElement | null = null;
   private currentBriefing: PersonalBriefing | null = null;
 
+  // Import Briefing Modal Elements
+  private importBriefingBtn: HTMLElement | null = null;
+  private importBriefingModal: HTMLElement | null = null;
+  private closeImportModalBtn: HTMLElement | null = null;
+  private briefingImportText: HTMLTextAreaElement | null = null;
+  private submitImportBtn: HTMLElement | null = null;
+
   async init() {
+    await runStorageMigration().catch(() => {});
+    this.bindDomElements();
     this.bindDomElements();
     this.setupIcons();
     this.setupClock();
@@ -142,6 +152,13 @@ class PortalNewTabController {
     this.briefingModalSchedule = document.getElementById('briefingModalSchedule');
     this.briefingModalFollowUps = document.getElementById('briefingModalFollowUps');
     this.copyBriefingSummaryBtn = document.getElementById('copyBriefingSummaryBtn');
+
+    // Import Briefing Modal Bindings
+    this.importBriefingBtn = document.getElementById('importBriefingBtn');
+    this.importBriefingModal = document.getElementById('importBriefingModal');
+    this.closeImportModalBtn = document.getElementById('closeImportModalBtn');
+    this.briefingImportText = document.getElementById('briefingImportText') as HTMLTextAreaElement | null;
+    this.submitImportBtn = document.getElementById('submitImportBtn');
   }
 
   private setupIcons() {
@@ -406,11 +423,11 @@ class PortalNewTabController {
       if (res.success) {
         this.showToast(res.message);
         if (this.openclawTaskInput) this.openclawTaskInput.value = '';
-        const updatedStatus = await storage.getOpenClawStatus();
-        if (updatedStatus) this.renderOpenClaw(updatedStatus);
       } else {
         this.showToast(`Task error: ${res.message}`);
       }
+      const updatedStatus = await openClawBridge.getCachedStatus();
+      if (updatedStatus) this.renderOpenClaw(updatedStatus);
     });
 
     // Expand Detailed Morning Briefing Modal
@@ -424,6 +441,32 @@ class PortalNewTabController {
 
     this.copyBriefingSummaryBtn?.addEventListener('click', () => {
       this.copyBriefingSummary();
+    });
+
+    // Import Briefing Modal Listeners
+    this.importBriefingBtn?.addEventListener('click', () => {
+      this.importBriefingModal?.classList.remove('hidden');
+    });
+
+    this.closeImportModalBtn?.addEventListener('click', () => {
+      this.importBriefingModal?.classList.add('hidden');
+    });
+
+    this.submitImportBtn?.addEventListener('click', async () => {
+      const text = this.briefingImportText?.value.trim() || '';
+      if (!text) {
+        this.showToast('Please enter briefing markdown or JSON');
+        return;
+      }
+      const res = await briefingService.importBriefing(text);
+      if (res.success && res.briefing) {
+        this.renderBriefing(res.briefing);
+        this.importBriefingModal?.classList.add('hidden');
+        if (this.briefingImportText) this.briefingImportText.value = '';
+        this.showToast(res.message);
+      } else {
+        this.showToast(res.message);
+      }
     });
 
     // Settings checkboxes
@@ -752,7 +795,6 @@ class PortalNewTabController {
           this.showToast(`Unpinned ${item.title}`);
         } else {
           await storage.pinShortcut({
-            id: item.id,
             title: item.title,
             url: item.url,
           });
@@ -1033,7 +1075,7 @@ class PortalNewTabController {
     try {
       const briefing = (await storage.getBriefing()) || (await briefingService.getBriefing());
       const mailSnapshot = (await storage.getMailSnapshot()) || (await briefingService.getMailSnapshot());
-      const openClawStatus = (await storage.getOpenClawStatus()) || (await openClawBridge.getStatus());
+      const openClawStatus = (await storage.getOpenClawStatus()) || (await openClawBridge.getCachedStatus());
 
       this.renderBriefing(briefing);
       this.renderMail(mailSnapshot);
@@ -1047,16 +1089,21 @@ class PortalNewTabController {
     if (this.refreshIntelBtn) {
       this.refreshIntelBtn.classList.add('spinning');
     }
-    this.showToast('Refreshing personal intelligence & gateway status...');
+    this.showToast('Refreshing personal intelligence & probing gateway...');
 
     try {
       const refreshed = await briefingService.refreshAll();
-      const openClawStatus = await openClawBridge.getStatus();
+      const openClawStatus = await openClawBridge.probeGateway(1200);
 
       this.renderBriefing(refreshed.briefing);
       this.renderMail(refreshed.mailSnapshot);
       this.renderOpenClaw(openClawStatus);
-      this.showToast('Intelligence surfaces updated');
+
+      if (openClawStatus.gatewayState === 'running') {
+        this.showToast('Gateway online on 127.0.0.1:57849');
+      } else {
+        this.showToast('Gateway is stopped or unreachable');
+      }
     } catch {
       this.showToast('Could not refresh intelligence data');
     } finally {
@@ -1068,43 +1115,66 @@ class PortalNewTabController {
 
   private renderBriefing(briefing: PersonalBriefing) {
     this.currentBriefing = briefing;
+    const sourcePill = document.getElementById('briefingSourcePill');
+    if (sourcePill) {
+      sourcePill.textContent = briefing.sourceIdentity || 'Unconfigured';
+    }
+
     if (this.briefingFreshnessTag) {
-      const minsAgo = Math.max(1, Math.round((Date.now() - briefing.generatedAt) / (1000 * 60)));
-      this.briefingFreshnessTag.textContent = `Updated ${minsAgo}m ago • ${briefing.status.toUpperCase()}`;
+      if (briefing.generatedAt > 0) {
+        const minsAgo = Math.max(1, Math.round((Date.now() - briefing.generatedAt) / (1000 * 60)));
+        this.briefingFreshnessTag.textContent = `Updated ${minsAgo}m ago • ${briefing.status.toUpperCase()}`;
+      } else {
+        this.briefingFreshnessTag.textContent = 'Not connected';
+      }
     }
 
     // Top Priorities
     if (this.briefingPrioritiesList) {
       this.briefingPrioritiesList.innerHTML = '';
-      briefing.topPriorities.forEach((item) => {
-        const li = document.createElement('li');
-        li.className = 'briefing-item';
-        li.innerHTML = `
-          <div class="briefing-item-title">
-            <span>${this.escapeHtml(item.title)}</span>
-            ${item.actionRequired ? '<span class="briefing-due-badge">Action Required</span>' : ''}
-          </div>
-          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
-        `;
-        this.briefingPrioritiesList.appendChild(li);
-      });
+      if (!briefing.topPriorities || briefing.topPriorities.length === 0) {
+        this.briefingPrioritiesList.innerHTML = `
+          <li style="color:var(--text-muted);font-size:12px;padding:8px 0;">
+            No priorities configured. Click "Import Briefing" to load Flowmate context or personal tasks.
+          </li>`;
+      } else {
+        briefing.topPriorities.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'briefing-item';
+          li.innerHTML = `
+            <div class="briefing-item-title">
+              <span>${this.escapeHtml(item.title)}</span>
+              ${item.actionRequired ? '<span class="briefing-due-badge">Action Required</span>' : ''}
+            </div>
+            <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+          `;
+          this.briefingPrioritiesList.appendChild(li);
+        });
+      }
     }
 
     // Schedule
     if (this.briefingScheduleList) {
       this.briefingScheduleList.innerHTML = '';
-      briefing.upcomingCommitments.forEach((item) => {
-        const li = document.createElement('li');
-        li.className = 'briefing-item';
-        li.innerHTML = `
-          <div class="briefing-item-title">
-            <span>${this.escapeHtml(item.title)}</span>
-            ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
-          </div>
-          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
-        `;
-        this.briefingScheduleList.appendChild(li);
-      });
+      if (!briefing.upcomingCommitments || briefing.upcomingCommitments.length === 0) {
+        this.briefingScheduleList.innerHTML = `
+          <li style="color:var(--text-muted);font-size:12px;padding:8px 0;">
+            No upcoming schedule or calendar commitments loaded.
+          </li>`;
+      } else {
+        briefing.upcomingCommitments.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'briefing-item';
+          li.innerHTML = `
+            <div class="briefing-item-title">
+              <span>${this.escapeHtml(item.title)}</span>
+              ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
+            </div>
+            <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+          `;
+          this.briefingScheduleList.appendChild(li);
+        });
+      }
     }
   }
 
@@ -1113,58 +1183,70 @@ class PortalNewTabController {
     this.briefingModal.classList.remove('hidden');
 
     const b = this.currentBriefing;
-    const minsAgo = Math.max(1, Math.round((Date.now() - b.generatedAt) / (1000 * 60)));
+    const minsAgo = b.generatedAt > 0 ? Math.max(1, Math.round((Date.now() - b.generatedAt) / (1000 * 60))) : 0;
     const freshnessEl = document.getElementById('briefingModalFreshness');
     if (freshnessEl) {
-      freshnessEl.textContent = `Updated ${minsAgo}m ago • ${b.status.toUpperCase()}`;
+      freshnessEl.textContent = b.generatedAt > 0 ? `Updated ${minsAgo}m ago • ${b.status.toUpperCase()}` : 'Not connected';
     }
 
     if (this.briefingModalPriorities) {
       this.briefingModalPriorities.innerHTML = '';
-      b.topPriorities.forEach((item) => {
-        const el = document.createElement('div');
-        el.className = 'briefing-item';
-        el.innerHTML = `
-          <div class="briefing-item-title">
-            <span>${this.escapeHtml(item.title)}</span>
-            <span class="source-pill">${this.escapeHtml(item.source)}</span>
-          </div>
-          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
-        `;
-        this.briefingModalPriorities!.appendChild(el);
-      });
+      if (!b.topPriorities || b.topPriorities.length === 0) {
+        this.briefingModalPriorities.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">No priorities loaded.</div>';
+      } else {
+        b.topPriorities.forEach((item) => {
+          const el = document.createElement('div');
+          el.className = 'briefing-item';
+          el.innerHTML = `
+            <div class="briefing-item-title">
+              <span>${this.escapeHtml(item.title)}</span>
+              <span class="source-pill">${this.escapeHtml(item.source)}</span>
+            </div>
+            <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+          `;
+          this.briefingModalPriorities!.appendChild(el);
+        });
+      }
     }
 
     if (this.briefingModalSchedule) {
       this.briefingModalSchedule.innerHTML = '';
-      b.upcomingCommitments.forEach((item) => {
-        const el = document.createElement('div');
-        el.className = 'briefing-item';
-        el.innerHTML = `
-          <div class="briefing-item-title">
-            <span>${this.escapeHtml(item.title)}</span>
-            ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
-          </div>
-          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
-        `;
-        this.briefingModalSchedule!.appendChild(el);
-      });
+      if (!b.upcomingCommitments || b.upcomingCommitments.length === 0) {
+        this.briefingModalSchedule.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">No schedule loaded.</div>';
+      } else {
+        b.upcomingCommitments.forEach((item) => {
+          const el = document.createElement('div');
+          el.className = 'briefing-item';
+          el.innerHTML = `
+            <div class="briefing-item-title">
+              <span>${this.escapeHtml(item.title)}</span>
+              ${item.dueTime ? `<span class="briefing-due-badge">${this.escapeHtml(item.dueTime)}</span>` : ''}
+            </div>
+            <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+          `;
+          this.briefingModalSchedule!.appendChild(el);
+        });
+      }
     }
 
     if (this.briefingModalFollowUps) {
       this.briefingModalFollowUps.innerHTML = '';
-      b.followUps.forEach((item) => {
-        const el = document.createElement('div');
-        el.className = 'briefing-item';
-        el.innerHTML = `
-          <div class="briefing-item-title">
-            <span>${this.escapeHtml(item.title)}</span>
-            <span class="briefing-due-badge">${this.escapeHtml(item.priority.toUpperCase())}</span>
-          </div>
-          <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
-        `;
-        this.briefingModalFollowUps!.appendChild(el);
-      });
+      if (!b.followUps || b.followUps.length === 0) {
+        this.briefingModalFollowUps.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">No unresolved follow-ups.</div>';
+      } else {
+        b.followUps.forEach((item) => {
+          const el = document.createElement('div');
+          el.className = 'briefing-item';
+          el.innerHTML = `
+            <div class="briefing-item-title">
+              <span>${this.escapeHtml(item.title)}</span>
+              <span class="briefing-due-badge">${this.escapeHtml(item.priority.toUpperCase())}</span>
+            </div>
+            <div class="briefing-item-summary">${this.escapeHtml(item.summary)}</div>
+          `;
+          this.briefingModalFollowUps!.appendChild(el);
+        });
+      }
     }
   }
 
@@ -1172,17 +1254,23 @@ class PortalNewTabController {
     if (!this.currentBriefing) return;
     const b = this.currentBriefing;
     const lines = [
-      `# Morning Command Briefing (${new Date(b.generatedAt).toLocaleDateString()})`,
+      `# Morning Command Briefing (${b.generatedAt > 0 ? new Date(b.generatedAt).toLocaleDateString() : 'Unconfigured'})`,
       `Source: ${b.sourceIdentity} • Status: ${b.status}`,
       '',
       '## Top Priorities',
-      ...b.topPriorities.map((p) => `- [ ] **${p.title}**: ${p.summary}`),
+      ...(b.topPriorities.length > 0
+        ? b.topPriorities.map((p) => `- [ ] **${p.title}**: ${p.summary}`)
+        : ['- (No priorities configured)']),
       '',
       '## Upcoming Schedule',
-      ...b.upcomingCommitments.map((c) => `- **${c.dueTime || 'Today'}**: ${c.title} — ${c.summary}`),
+      ...(b.upcomingCommitments.length > 0
+        ? b.upcomingCommitments.map((c) => `- **${c.dueTime || 'Today'}**: ${c.title} — ${c.summary}`)
+        : ['- (No schedule loaded)']),
       '',
       '## Follow-Ups',
-      ...b.followUps.map((f) => `- [ ] ${f.title}: ${f.summary}`),
+      ...(b.followUps.length > 0
+        ? b.followUps.map((f) => `- [ ] ${f.title}: ${f.summary}`)
+        : ['- (None)']),
     ];
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
@@ -1196,8 +1284,8 @@ class PortalNewTabController {
     if (!this.mailHighlightsList) return;
     this.mailHighlightsList.innerHTML = '';
 
-    if (mailSnapshot.items.length === 0) {
-      this.mailHighlightsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px;">No actionable emails found</div>';
+    if (!mailSnapshot.items || mailSnapshot.items.length === 0) {
+      this.mailHighlightsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px;">No email connector configured. Authorize Gmail via local companion to view actionable highlights.</div>';
       return;
     }
 
@@ -1219,29 +1307,33 @@ class PortalNewTabController {
 
   private renderOpenClaw(status: OpenClawSystemStatus) {
     if (this.openclawStatusDot && this.openclawGatewayLabel) {
-      if (status.gatewayOnline) {
+      if (status.gatewayState === 'running') {
         this.openclawStatusDot.className = 'status-dot online';
-        this.openclawGatewayLabel.textContent = `Gateway Online (Port ${status.gatewayPort})`;
+        this.openclawGatewayLabel.textContent = `Gateway: Online (Port ${status.gatewayPort})`;
       } else {
         this.openclawStatusDot.className = 'status-dot stopped';
-        this.openclawGatewayLabel.textContent = `Gateway Standby / Stopped (Port ${status.gatewayPort})`;
+        this.openclawGatewayLabel.textContent = `Gateway: Stopped (Port ${status.gatewayPort})`;
       }
     }
 
     if (this.openclawNodesRow) {
       this.openclawNodesRow.innerHTML = '';
-      status.pairedNodes.forEach((node) => {
-        const pill = document.createElement('span');
-        pill.className = `node-pill ${node.isCoordinator ? 'coordinator' : ''}`;
-        pill.textContent = `${node.name} [${node.status.toUpperCase()}]`;
-        this.openclawNodesRow.appendChild(pill);
-      });
+
+      const coordPill = document.createElement('span');
+      coordPill.className = `node-pill coordinator ${status.coordinatorNode?.status === 'online' ? 'online' : ''}`;
+      coordPill.textContent = `${status.coordinatorNode?.name || 'IdeaPad (Coordinator)'} [${(status.coordinatorNode?.status || 'offline').toUpperCase()}]`;
+      this.openclawNodesRow.appendChild(coordPill);
+
+      const workerPill = document.createElement('span');
+      workerPill.className = `node-pill ${status.workstationNode?.status || 'unpaired'}`;
+      workerPill.textContent = `${status.workstationNode?.name || 'ThinkBook (Workstation)'} [${(status.workstationNode?.status || 'unpaired').toUpperCase()}]`;
+      this.openclawNodesRow.appendChild(workerPill);
     }
 
     if (this.openclawJobsList) {
       this.openclawJobsList.innerHTML = '';
-      if (status.recentJobs.length === 0) {
-        this.openclawJobsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px;">No recent runs</div>';
+      if (!status.recentJobs || status.recentJobs.length === 0) {
+        this.openclawJobsList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">No automation jobs recorded.</div>';
       } else {
         status.recentJobs.forEach((job) => {
           const row = document.createElement('div');

@@ -39,8 +39,33 @@ const STORAGE_KEYS = {
 } as const;
 
 class StorageService {
+  private memoryFallback = new Map<string, string>();
+
   private isExtensionEnvironment(): boolean {
     return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local;
+  }
+
+  private getRaw(key: string): string | null {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+    return this.memoryFallback.get(key) || null;
+  }
+
+  private setRaw(key: string, value: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, value);
+    } else {
+      this.memoryFallback.set(key, value);
+    }
+  }
+
+  private removeRaw(key: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+    } else {
+      this.memoryFallback.delete(key);
+    }
   }
 
   async getPreferences(): Promise<UserPreferences> {
@@ -52,7 +77,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.PREFERENCES);
+      const stored = this.getRaw(STORAGE_KEYS.PREFERENCES);
       return stored ? { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) } : DEFAULT_PREFERENCES;
     } catch {
       return DEFAULT_PREFERENCES;
@@ -64,10 +89,12 @@ class StorageService {
     const updated = { ...current, ...prefs };
     if (this.isExtensionEnvironment()) {
       return new Promise((resolve) => {
-        chrome.storage.local.set({ [STORAGE_KEYS.PREFERENCES]: updated }, () => resolve(updated));
+        chrome.storage.local.set({ [STORAGE_KEYS.PREFERENCES]: updated }, () => {
+          resolve(updated);
+        });
       });
     }
-    localStorage.setItem(STORAGE_KEYS.PREFERENCES, JSON.stringify(updated));
+    this.setRaw(STORAGE_KEYS.PREFERENCES, JSON.stringify(updated));
     return updated;
   }
 
@@ -80,49 +107,51 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.PINNED);
+      const stored = this.getRaw(STORAGE_KEYS.PINNED);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
     }
   }
 
-  async pinShortcut(shortcut: Omit<PinnedShortcut, 'addedAt'>): Promise<PinnedShortcut[]> {
+  async pinShortcut(shortcut: Omit<PinnedShortcut, 'id' | 'addedAt'>): Promise<PinnedShortcut[]> {
     const current = await this.getPinnedShortcuts();
-    const existingIndex = current.findIndex((p) => p.url === shortcut.url || p.id === shortcut.id);
+    const existingIndex = current.findIndex((p) => p.url === shortcut.url);
     const item: PinnedShortcut = {
-      ...shortcut,
+      id: `pin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: shortcut.title,
+      url: shortcut.url,
+      customTitle: shortcut.customTitle,
       addedAt: Date.now(),
     };
+
     let updated: PinnedShortcut[];
     if (existingIndex >= 0) {
       updated = [...current];
       updated[existingIndex] = item;
     } else {
-      updated = [item, ...current];
+      updated = [item, ...current].slice(0, 16);
     }
-    // Limit to max 24 pinned items
-    updated = updated.slice(0, 24);
 
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.PINNED, JSON.stringify(updated));
     }
     return updated;
   }
 
-  async unpinShortcut(urlOrId: string): Promise<PinnedShortcut[]> {
+  async unpinShortcut(url: string): Promise<PinnedShortcut[]> {
     const current = await this.getPinnedShortcuts();
-    const updated = current.filter((p) => p.id !== urlOrId && p.url !== urlOrId);
+    const updated = current.filter((p) => p.url !== url);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.PINNED, JSON.stringify(updated));
     }
     return updated;
   }
@@ -136,38 +165,32 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.DISMISSED);
+      const stored = this.getRaw(STORAGE_KEYS.DISMISSED);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
     }
   }
 
-  async dismissItem(urlOrDomain: string): Promise<DismissedItem[]> {
+  async dismissItem(urlOrDomain: string): Promise<void> {
     const current = await this.getDismissedItems();
-    const cleanKey = urlOrDomain.toLowerCase().trim();
-    if (current.some((d) => d.urlOrDomain === cleanKey)) return current;
+    const clean = urlOrDomain.toLowerCase().trim();
+    const filtered = current.filter((d) => d.urlOrDomain !== clean);
+    const updated = [{ urlOrDomain: clean, dismissedAt: Date.now() }, ...filtered].slice(0, 100);
 
-    const updated = [{ urlOrDomain: cleanKey, dismissedAt: Date.now() }, ...current].slice(0, 100);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.DISMISSED]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.DISMISSED, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.DISMISSED, JSON.stringify(updated));
     }
-    return updated;
   }
 
   async isDismissed(urlOrDomain: string): Promise<boolean> {
     const dismissed = await this.getDismissedItems();
-    const lower = urlOrDomain.toLowerCase().trim();
-    try {
-      const host = new URL(urlOrDomain).hostname.toLowerCase();
-      return dismissed.some((d) => d.urlOrDomain === lower || d.urlOrDomain === host);
-    } catch {
-      return dismissed.some((d) => d.urlOrDomain === lower);
-    }
+    const target = urlOrDomain.toLowerCase().trim();
+    return dismissed.some((d) => d.urlOrDomain === target);
   }
 
   async getAliases(): Promise<CustomAlias[]> {
@@ -179,7 +202,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.ALIASES);
+      const stored = this.getRaw(STORAGE_KEYS.ALIASES);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -195,7 +218,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.ALIASES]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.ALIASES, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.ALIASES, JSON.stringify(updated));
     }
     return updated;
   }
@@ -209,7 +232,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.INTELLIGENCE);
+      const stored = this.getRaw(STORAGE_KEYS.INTELLIGENCE);
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -222,7 +245,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.INTELLIGENCE]: intel }, () => resolve());
       });
     }
-    localStorage.setItem(STORAGE_KEYS.INTELLIGENCE, JSON.stringify(intel));
+    this.setRaw(STORAGE_KEYS.INTELLIGENCE, JSON.stringify(intel));
   }
 
   async clearDerivedData(): Promise<void> {
@@ -240,11 +263,11 @@ class StorageService {
         );
       });
     }
-    localStorage.removeItem(STORAGE_KEYS.INTELLIGENCE);
-    localStorage.removeItem(STORAGE_KEYS.DISMISSED);
-    localStorage.removeItem(STORAGE_KEYS.BRIEFING);
-    localStorage.removeItem(STORAGE_KEYS.MAIL_SNAPSHOT);
-    localStorage.removeItem(STORAGE_KEYS.OPENCLAW_STATUS);
+    this.removeRaw(STORAGE_KEYS.INTELLIGENCE);
+    this.removeRaw(STORAGE_KEYS.DISMISSED);
+    this.removeRaw(STORAGE_KEYS.BRIEFING);
+    this.removeRaw(STORAGE_KEYS.MAIL_SNAPSHOT);
+    this.removeRaw(STORAGE_KEYS.OPENCLAW_STATUS);
   }
 
   // --- Personal Intelligence Briefing Cache ---
@@ -257,7 +280,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.BRIEFING);
+      const stored = this.getRaw(STORAGE_KEYS.BRIEFING);
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -270,7 +293,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.BRIEFING]: briefing }, () => resolve());
       });
     }
-    localStorage.setItem(STORAGE_KEYS.BRIEFING, JSON.stringify(briefing));
+    this.setRaw(STORAGE_KEYS.BRIEFING, JSON.stringify(briefing));
   }
 
   // --- Important Mail Highlights Cache ---
@@ -283,7 +306,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.MAIL_SNAPSHOT);
+      const stored = this.getRaw(STORAGE_KEYS.MAIL_SNAPSHOT);
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -296,7 +319,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.MAIL_SNAPSHOT]: snapshot }, () => resolve());
       });
     }
-    localStorage.setItem(STORAGE_KEYS.MAIL_SNAPSHOT, JSON.stringify(snapshot));
+    this.setRaw(STORAGE_KEYS.MAIL_SNAPSHOT, JSON.stringify(snapshot));
   }
 
   // --- OpenClaw Activity & System Status Cache ---
@@ -309,7 +332,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.OPENCLAW_STATUS);
+      const stored = this.getRaw(STORAGE_KEYS.OPENCLAW_STATUS);
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -322,7 +345,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.OPENCLAW_STATUS]: status }, () => resolve());
       });
     }
-    localStorage.setItem(STORAGE_KEYS.OPENCLAW_STATUS, JSON.stringify(status));
+    this.setRaw(STORAGE_KEYS.OPENCLAW_STATUS, JSON.stringify(status));
   }
 
   // --- Saved Browsing Workspaces & Recoverable Sessions ---
@@ -335,7 +358,7 @@ class StorageService {
       });
     }
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+      const stored = this.getRaw(STORAGE_KEYS.SESSIONS);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -357,7 +380,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
     }
     return session;
   }
@@ -370,7 +393,7 @@ class StorageService {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
       });
     } else {
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
+      this.setRaw(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
     }
   }
 }

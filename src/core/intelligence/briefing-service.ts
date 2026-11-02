@@ -1,166 +1,266 @@
-import { PersonalBriefing, ImportantMailSnapshot, BriefingItem, ImportantMailItem } from '../types';
+import {
+  PersonalBriefing,
+  ImportantMailSnapshot,
+  BriefingItem,
+  ImportantMailItem,
+  ConnectionStatus,
+} from '../types';
 import { storage } from '../storage';
+import { CURRENT_SCHEMA_VERSION, migrateBriefing, migrateMailSnapshot } from '../migration';
 
 export class BriefingService {
   private readonly STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
   /**
+   * Safe helper to construct a verified, canonical Gmail thread URL.
+   * Rejects arbitrary or unverified URL schemes.
+   */
+  static buildGmailThreadUrl(threadId: string, accountIndex = 0): string {
+    const cleanId = threadId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const cleanIndex = Math.max(0, Math.floor(accountIndex));
+    return `https://mail.google.com/mail/u/${cleanIndex}/#inbox/${encodeURIComponent(cleanId)}`;
+  }
+
+  /**
    * Retrieves the personal intelligence briefing projection.
    * Resolves immediately from local storage cache; never blocks new tab rendering.
+   * If no cache exists, returns an honest unconfigured state. Never generates synthetic personal data.
    */
   async getBriefing(): Promise<PersonalBriefing> {
-    const cached = await storage.getBriefing();
+    const raw = await storage.getBriefing();
     const now = Date.now();
 
-    if (cached) {
-      // Re-evaluate freshness based on elapsed time
-      const isStale = now - cached.generatedAt > this.STALE_THRESHOLD_MS;
+    if (!raw) {
       return {
-        ...cached,
-        status: isStale ? 'stale' : 'fresh',
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        generatedAt: 0,
+        lastCachedAt: now,
+        sourceIdentity: 'Unconfigured',
+        status: 'unconfigured',
+        topPriorities: [],
+        upcomingCommitments: [],
+        followUps: [],
       };
     }
 
-    // Initialize structured initial projection based on Flowmate morning briefing model
-    const initialBriefing: PersonalBriefing = {
-      generatedAt: now - 1000 * 60 * 35, // 35 mins ago
-      sourceIdentity: 'Flowmate Context Engine',
-      status: 'fresh',
-      topPriorities: [
-        {
-          id: 'prio-1',
-          title: 'Portal v1.3 Browser & Device Orchestration Release',
-          summary: 'Complete audit fixes, personal briefing surface, and OpenClaw bridge verification.',
-          source: 'flowmate',
-          observedAt: now - 1000 * 60 * 35,
-          actionRequired: true,
-          priority: 'high',
-        },
-        {
-          id: 'prio-2',
-          title: 'IdeaPad & ThinkBook OpenClaw Gateway Coordination',
-          summary: 'Verify isolated-session host routing and loopback boundary on port 57849.',
-          source: 'openclaw',
-          observedAt: now - 1000 * 60 * 35,
-          actionRequired: true,
-          priority: 'high',
-        },
-      ],
-      upcomingCommitments: [
-        {
-          id: 'comm-1',
-          title: 'Chrome MV3 Extension Review & Performance Audit',
-          summary: 'Verify 0% idle CPU and <50ms TTI budget under full Playwright E2E suite.',
-          source: 'calendar',
-          dueTime: 'Today • 4:00 PM',
-          observedAt: now - 1000 * 60 * 35,
-          actionRequired: false,
-          priority: 'medium',
-        },
-        {
-          id: 'comm-2',
-          title: 'Flowmate Journal Incremental Sync Check',
-          summary: 'Verify syncToken delta ingestion for external canonical commitments.',
-          source: 'flowmate',
-          dueTime: 'Tomorrow • 10:00 AM',
-          observedAt: now - 1000 * 60 * 35,
-          actionRequired: false,
-          priority: 'medium',
-        },
-      ],
-      followUps: [
-        {
-          id: 'fol-1',
-          title: 'Check ThinkBook Tailscale / SSH Node Pairing Key',
-          summary: 'Obtain auth key from ThinkBook workstation for remote node registration.',
-          source: 'openclaw',
-          observedAt: now - 1000 * 60 * 35,
-          actionRequired: true,
-          priority: 'medium',
-        },
-      ],
-    };
+    // Run migration if needed
+    const briefing = raw.schemaVersion === CURRENT_SCHEMA_VERSION ? raw : migrateBriefing(raw);
 
-    await storage.saveBriefing(initialBriefing);
-    return initialBriefing;
+    if (briefing.topPriorities.length === 0 && briefing.upcomingCommitments.length === 0 && briefing.followUps.length === 0) {
+      return {
+        ...briefing,
+        status: 'unconfigured',
+      };
+    }
+
+    // Re-evaluate freshness based on elapsed source observation time
+    const isStale = briefing.generatedAt > 0 && now - briefing.generatedAt > this.STALE_THRESHOLD_MS;
+    return {
+      ...briefing,
+      status: isStale ? 'stale' : 'connected',
+    };
   }
 
   /**
    * Retrieves the Important Mail Highlights projection.
-   * Sourced from the user's high-priority classification workflow.
+   * Resolves immediately from local storage cache; never blocks new tab rendering.
+   * If no cache exists, returns an honest unconfigured state. Never generates synthetic emails.
    */
   async getMailSnapshot(): Promise<ImportantMailSnapshot> {
-    const cached = await storage.getMailSnapshot();
+    const raw = await storage.getMailSnapshot();
     const now = Date.now();
 
-    if (cached) {
-      return cached;
+    if (!raw) {
+      return {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        lastChecked: 0,
+        lastCachedAt: now,
+        status: 'unconfigured',
+        account: '',
+        items: [],
+      };
     }
 
-    const initialSnapshot: ImportantMailSnapshot = {
-      lastChecked: now - 1000 * 60 * 20, // 20 mins ago
-      status: 'cached',
-      items: [
-        {
-          id: 'mail-1',
-          threadId: '192d4b7c1a2e3f40',
-          from: 'Tech Recruiter <talent@frontier-ai.org>',
-          subject: 'Senior Systems & AI Infrastructure Role — Next Round Discussion',
-          snippet: 'Hi, following up on your engineering review. We would like to schedule a 45-minute discussion regarding your agent orchestration architecture...',
-          receivedAt: now - 1000 * 60 * 120,
-          threadUrl: 'https://mail.google.com/mail/u/0/#inbox/192d4b7c1a2e3f40',
-          urgencyReason: 'Recruiter communication • Action requested today',
-          actionRequired: true,
-          category: 'recruiter',
-        },
-        {
-          id: 'mail-2',
-          threadId: '192d3f8a9b1c2d34',
-          from: 'Google Developer Console <dev-notifications@google.com>',
-          subject: 'Chrome Web Store: Manifest V3 Policy & Compliance Update',
-          snippet: 'Important reminders on extension isolation, content security policy, and host permission scope for extensions published in Chrome 156+...',
-          receivedAt: now - 1000 * 60 * 360,
-          threadUrl: 'https://mail.google.com/mail/u/0/#inbox/192d3f8a9b1c2d34',
-          urgencyReason: 'Developer platform policy update',
-          actionRequired: false,
-          category: 'update',
-        },
-      ],
-    };
+    const snapshot = raw.schemaVersion === CURRENT_SCHEMA_VERSION ? raw : migrateMailSnapshot(raw);
 
-    await storage.saveMailSnapshot(initialSnapshot);
-    return initialSnapshot;
+    if (snapshot.items.length === 0) {
+      return {
+        ...snapshot,
+        status: 'unconfigured',
+      };
+    }
+
+    const isStale = snapshot.lastChecked > 0 && now - snapshot.lastChecked > this.STALE_THRESHOLD_MS;
+    return {
+      ...snapshot,
+      status: isStale ? 'stale' : 'connected',
+    };
   }
 
   /**
-   * Explicit user-requested refresh of all intelligence projections.
+   * Explicit user-triggered import of a structured briefing record
+   * (e.g. from Flowmate, daily markdown notes, or clipboard export).
+   */
+  async importBriefing(
+    input: string | Partial<PersonalBriefing>,
+  ): Promise<{ success: boolean; message: string; briefing?: PersonalBriefing }> {
+    try {
+      let data: any;
+      if (typeof input === 'string') {
+        const trimmed = input.trim();
+        if (trimmed.startsWith('{')) {
+          data = JSON.parse(trimmed);
+        } else {
+          // Parse structured markdown bullets
+          data = this.parseMarkdownBriefing(trimmed);
+        }
+      } else {
+        data = input;
+      }
+
+      const topPriorities: BriefingItem[] = Array.isArray(data.topPriorities)
+        ? data.topPriorities.map((item: any, idx: number) => ({
+            id: String(item.id || `imp-prio-${idx}-${Date.now()}`),
+            title: String(item.title || 'Untitled Priority').slice(0, 150),
+            summary: String(item.summary || '').slice(0, 500),
+            source: 'user_import' as const,
+            observedAt: Number(item.observedAt) || Date.now(),
+            actionRequired: Boolean(item.actionRequired),
+            priority: (['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium') as any,
+          }))
+        : [];
+
+      const upcomingCommitments: BriefingItem[] = Array.isArray(data.upcomingCommitments)
+        ? data.upcomingCommitments.map((item: any, idx: number) => ({
+            id: String(item.id || `imp-comm-${idx}-${Date.now()}`),
+            title: String(item.title || 'Untitled Commitment').slice(0, 150),
+            summary: String(item.summary || '').slice(0, 500),
+            source: 'user_import' as const,
+            observedAt: Number(item.observedAt) || Date.now(),
+            dueTime: item.dueTime ? String(item.dueTime).slice(0, 50) : undefined,
+            actionRequired: Boolean(item.actionRequired),
+            priority: (['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium') as any,
+          }))
+        : [];
+
+      const followUps: BriefingItem[] = Array.isArray(data.followUps)
+        ? data.followUps.map((item: any, idx: number) => ({
+            id: String(item.id || `imp-fol-${idx}-${Date.now()}`),
+            title: String(item.title || 'Untitled Follow-up').slice(0, 150),
+            summary: String(item.summary || '').slice(0, 500),
+            source: 'user_import' as const,
+            observedAt: Number(item.observedAt) || Date.now(),
+            actionRequired: Boolean(item.actionRequired),
+            priority: (['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium') as any,
+          }))
+        : [];
+
+      if (topPriorities.length === 0 && upcomingCommitments.length === 0 && followUps.length === 0) {
+        return {
+          success: false,
+          message: 'No valid briefing items found in import. Expected topPriorities, upcomingCommitments, or followUps.',
+        };
+      }
+
+      const now = Date.now();
+      const newBriefing: PersonalBriefing = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        generatedAt: Number(data.generatedAt) || now,
+        lastCachedAt: now,
+        sourceIdentity: String(data.sourceIdentity || 'User Imported Projection'),
+        status: 'connected',
+        topPriorities,
+        upcomingCommitments,
+        followUps,
+      };
+
+      await storage.saveBriefing(newBriefing);
+      return {
+        success: true,
+        message: `Imported briefing with ${topPriorities.length} priorities, ${upcomingCommitments.length} commitments`,
+        briefing: newBriefing,
+      };
+    } catch (err: any) {
+      return { success: false, message: `Failed to import briefing: ${err.message}` };
+    }
+  }
+
+  /**
+   * Helper to parse markdown bullet lists into briefing items
+   */
+  private parseMarkdownBriefing(text: string): Partial<PersonalBriefing> {
+    const lines = text.split('\n');
+    const priorities: BriefingItem[] = [];
+    const commitments: BriefingItem[] = [];
+    let currentSection: 'priorities' | 'commitments' | 'followups' | 'none' = 'none';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const lower = line.toLowerCase();
+      if (lower.includes('priorit')) {
+        currentSection = 'priorities';
+        continue;
+      } else if (lower.includes('schedule') || lower.includes('calendar') || lower.includes('commitment')) {
+        currentSection = 'commitments';
+        continue;
+      } else if (lower.includes('follow') || lower.includes('action')) {
+        currentSection = 'followups';
+        continue;
+      }
+
+      if (line.startsWith('-') || line.startsWith('*')) {
+        const content = line.replace(/^[-*]\s*(\[[ xX]\]\s*)?/, '').trim();
+        if (!content) continue;
+        const parts = content.split(/[:—–-]\s*/);
+        const title = parts[0]?.trim() || content;
+        const summary = parts.slice(1).join(' — ').trim() || title;
+
+        const item: BriefingItem = {
+          id: `md-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: title.slice(0, 120),
+          summary: summary.slice(0, 300),
+          source: 'user_import',
+          observedAt: Date.now(),
+          actionRequired: true,
+          priority: 'medium',
+        };
+
+        if (currentSection === 'commitments') {
+          commitments.push(item);
+        } else {
+          priorities.push(item);
+        }
+      }
+    }
+
+    return {
+      sourceIdentity: 'User Imported Markdown',
+      generatedAt: Date.now(),
+      topPriorities: priorities,
+      upcomingCommitments: commitments,
+      followUps: [],
+    };
+  }
+
+  /**
+   * Explicit user-requested refresh of intelligence projections.
+   * CRITICAL DATA INTEGRITY INVARIANT:
+   * When no external source adapter is connected, refresh re-checks local cache freshness
+   * and MUST NEVER advance the source observation timestamp (generatedAt / lastChecked).
    */
   async refreshAll(): Promise<{
     briefing: PersonalBriefing;
     mailSnapshot: ImportantMailSnapshot;
+    sourceRefreshed: boolean;
   }> {
-    const now = Date.now();
     const briefing = await this.getBriefing();
     const mailSnapshot = await this.getMailSnapshot();
 
-    const refreshedBriefing: PersonalBriefing = {
-      ...briefing,
-      generatedAt: now,
-      status: 'fresh',
-    };
-
-    const refreshedMail: ImportantMailSnapshot = {
-      ...mailSnapshot,
-      lastChecked: now,
-      status: 'cached',
-    };
-
-    await storage.saveBriefing(refreshedBriefing);
-    await storage.saveMailSnapshot(refreshedMail);
-
+    // In local-first unconfigured mode, we do NOT fake new source timestamps
     return {
-      briefing: refreshedBriefing,
-      mailSnapshot: refreshedMail,
+      briefing,
+      mailSnapshot,
+      sourceRefreshed: false,
     };
   }
 }

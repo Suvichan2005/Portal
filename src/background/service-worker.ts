@@ -247,7 +247,7 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
     case 'PORTAL_REFRESH_INTELLIGENCE': {
       const [refreshed, openClawStatus] = await Promise.all([
         briefingService.refreshAll(),
-        openClawBridge.getStatus(),
+        openClawBridge.probeGateway(1200),
       ]);
       return {
         success: true,

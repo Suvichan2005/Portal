@@ -94,7 +94,6 @@ export class IntelligenceManager {
    */
   async pinCluster(cluster: HistoryCluster): Promise<void> {
     await storage.pinShortcut({
-      id: cluster.id,
       title: cluster.topic,
       url: cluster.primaryUrl,
       customTitle: cluster.topic,

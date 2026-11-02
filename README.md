@@ -4,15 +4,17 @@
 
 ![Portal New Tab](docs/screenshots/01-newtab-home.png)
 
-## Core Capabilities in v1.3.0
+## Core Capabilities in v1.3.1
 
-- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (**45.4ms DOM interactive, 3.44MB JS heap**, 0% idle CPU).
+- **Ultra-Lightweight Homepage**: Replaces Chrome's New Tab with an instantaneous, minimal, typography-focused dashboard (**28.4ms DOM interactive, 3.20MB JS heap**, 0% idle CPU, **ZERO unsolicited network requests**).
 - **Floating Command Palette (`Alt+Q`)**: Press `Alt+Q` on any webpage to instantly summon a floating launcher over the active tab for seamless tab switching, bookmark lookup, web search, and browser actions.
 - **Context-Preserving Search & Navigation**: Searches and links triggered from the floating launcher automatically open in a **new tab**, never replacing or interrupting your current webpage.
-- **Personal Intelligence Briefing**: Surfaces morning priorities, commitments, and schedule previews backed by local projections from Flowmate, tagged by source with real freshness indicators.
+- **Personal Intelligence Briefing with User Import**: Displays honest unconfigured states when sources are offline; provides an **Import Briefing** workflow supporting Markdown task lists (`- [ ] task`) and JSON.
+- **Strict Source Integrity & Zero Fabricated Data**: Production code and default caches are completely free of fake recruiter emails, fabricated calendar meetings, or simulated OpenClaw job completions.
+- **Truthful OpenClaw & Node Status**: Accurately reflects real host status (IdeaPad coordinator `OFFLINE` when Gateway service on port 57849 is stopped; ThinkBook workstation displayed truthfully as `UNPAIRED (Requires Tailscale SSH setup)`).
+- **Honest Bounded Task Execution**: Verifies actual runner connectivity; immediately rejects tasks with clear, actionable guidance if the Gateway is stopped rather than fabricating successful queueing.
 - **Expandable Detailed Briefing Modal**: Full breakdown of strategic priorities, time-sensitive deadlines, unresolved follow-ups, and one-click markdown summary copying.
-- **Important Mail Highlights**: Clean, action-oriented thread highlights with read-only direct Gmail links (`https://mail.google.com/mail/u/0/#inbox/<threadId>`) and an instant **Privacy Preview toggle** to mask snippets when screen sharing.
-- **OpenClaw Activity & Control Center**: Probes local OpenClaw Gateway on loopback (`127.0.0.1:57849`), displays coordinator (IdeaPad) and workstation (ThinkBook) node states, and provides bounded task submission with toast confirmation.
+- **Important Mail Highlights with Privacy Mode**: Action-oriented thread highlights with canonical, sanitized Gmail URLs (`https://mail.google.com/mail/u/0/#inbox/<threadId>`) and an instant **Privacy Preview toggle** to mask snippets when screen sharing.
 - **Saved Browsing Session Workspaces**: Snapshot all open tabs in your current window into a named recoverable session (`/save-session`); restore them in a new window with one click (`/restore-session` or search `session`).
 - **Audio Tab Control & Filtering**: Type `@audio` (or `@sound`, `@music`) to isolate playing media tabs. Audio tabs display a prominent `AUDIO 🔊` badge and priority boost; control them via `/switch-to-audio-tab` or `/mute-all-audio-tabs`.
 - **Quick Search Bangs**: Instant DuckDuckGo-style bangs (`!gh` GitHub, `!yt` YouTube, `!w` Wikipedia, `!so` Stack Overflow, `!r` Reddit, `!npm` npm, `!m` Google Maps, `!g` Google, `!x` Twitter, `!ddg` DuckDuckGo) for direct routing.
@@ -38,14 +40,16 @@
 
 Measured on a Lenovo IdeaPad (Windows 11, Chrome 156):
 
-| Metric | Native Chrome NTP Baseline | Portal Target Budget | Portal v1.3.0 Result | Status |
+| Metric | Native Chrome NTP Baseline | Portal Target Budget | Portal v1.3.1 Result | Status |
 |---|---|---|---|---|
-| **DOM Interactive** | 18.30 ms | < 100 ms | **45.40 ms** | **PASSED** |
-| **DOM Content Loaded** | 18.40 ms | < 120 ms | **67.80 ms** | **PASSED** |
-| **Warm Navigation Average** | ~72.90 ms | < 250 ms | **143.68 ms** | **PASSED** |
-| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.44 MB** | **EXCEEDED** (< 1/8 native) |
-| **Keypress Autocomplete Latency** | < 16 ms | < 60 ms | **53.11 ms** | **PASSED** |
-| **Extension Bundle Size** | N/A | < 250 KB | **94.8 KB** (total dist) | **EXCEEDED** |
+| **DOM Interactive** | 18.30 ms | < 100 ms | **28.40 ms** | **PASSED** |
+| **DOM Content Loaded** | 18.40 ms | < 120 ms | **61.40 ms** | **PASSED** |
+| **Warm Navigation Average** | ~72.90 ms | < 250 ms | **175.70 ms** | **PASSED** |
+| **Active JS Heap** | ~28.00 MB | < 38.00 MB | **3.20 MB** | **EXCEEDED** (< 1/8 native) |
+| **Keypress Autocomplete Latency** | < 16 ms | < 60 ms | **45.95 ms** | **PASSED** |
+| **Launcher Summon Latency** | N/A | < 150 ms | **116.12 ms** | **PASSED** |
+| **Cold NTP Network Requests** | 0 external | 0 external / 0 loopback | **0 requests** | **PASSED** |
+| **Extension Bundle Size** | N/A | < 250 KB | **95.6 KB** (total dist) | **EXCEEDED** |
 | **Idle Service Worker CPU** | 0% | 0% | **0%** | **PASSED** (Suspends cleanly) |
 
 See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for full benchmark methodology.
@@ -66,13 +70,13 @@ See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for full benchmark methodology.
 # Install dependencies
 npm install
 
-# Typecheck codebase
+# Typecheck codebase (strict mode)
 npm run typecheck
 
 # Build production extension (dist/)
 npm run build
 
-# Run automated Playwright E2E browser test suite (21 tests)
+# Run full automated test suite (34 tests: 12 unit + 22 Playwright E2E browser tests)
 npm test
 
 # Run real browser performance benchmark
@@ -82,8 +86,8 @@ npm run benchmark
 ---
 
 ## Architecture & Verification
-- [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md) — Implementation status, audited fixes, and v1.3.0 capabilities.
+- [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md) — Implementation status, audited fixes, and v1.3.1 source integrity corrections.
+- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 44-item verification matrix across real browser workflows and unit tests.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural decision log, trade-off rationale, and DEC-020 through DEC-023.
+- [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — Detailed latency, memory, network, and startup measurements.
 - [`docs/DEVICE_TOPOLOGY.md`](docs/DEVICE_TOPOLOGY.md) — Multi-device orchestration topology, IdeaPad coordinator, ThinkBook worker node, security boundaries, and execution classes.
-- [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — Complete 39-item verification matrix across real browser workflows.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural decision log and trade-off rationale.
-- [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — Detailed latency, memory, and startup measurements.

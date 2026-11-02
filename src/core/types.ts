@@ -110,11 +110,33 @@ export interface InitialLauncherState {
   modelStatus: string;
 }
 
+export type ConnectionStatus =
+  | 'unconfigured'
+  | 'connecting'
+  | 'connected'
+  | 'stale'
+  | 'disconnected'
+  | 'unauthorized'
+  | 'error';
+
+export type TaskExecutionStatus =
+  | 'draft'
+  | 'requested_locally'
+  | 'transport_accepted'
+  | 'runner_accepted'
+  | 'runner_queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'rejected'
+  | 'timed_out'
+  | 'unknown';
+
 export interface BriefingItem {
   id: string;
   title: string;
   summary: string;
-  source: 'flowmate' | 'openclaw' | 'google_tasks' | 'calendar' | 'system';
+  source: 'flowmate' | 'openclaw' | 'google_tasks' | 'calendar' | 'system' | 'user_import';
   sourceUrl?: string;
   observedAt: number;
   dueTime?: string;
@@ -123,9 +145,11 @@ export interface BriefingItem {
 }
 
 export interface PersonalBriefing {
+  schemaVersion: number;
   generatedAt: number;
+  lastCachedAt: number;
   sourceIdentity: string;
-  status: 'fresh' | 'stale' | 'offline_cached' | 'disconnected';
+  status: ConnectionStatus;
   topPriorities: BriefingItem[];
   upcomingCommitments: BriefingItem[];
   followUps: BriefingItem[];
@@ -145,35 +169,58 @@ export interface ImportantMailItem {
 }
 
 export interface ImportantMailSnapshot {
+  schemaVersion: number;
   lastChecked: number;
-  status: 'connected' | 'disconnected' | 'cached' | 'unauthorized';
+  lastCachedAt: number;
+  status: ConnectionStatus;
+  account?: string;
   items: ImportantMailItem[];
+}
+
+export interface OpenClawNodeInfo {
+  id: string;
+  name: string;
+  host: string;
+  status: 'online' | 'offline' | 'unpaired' | 'unreachable';
+  role: 'coordinator' | 'worker';
+  note?: string;
 }
 
 export interface OpenClawJobSummary {
   id: string;
+  correlationId?: string;
   task: string;
   host: 'ideapad' | 'thinkbook' | 'sandbox' | 'unknown';
-  status: 'running' | 'queued' | 'completed' | 'failed' | 'requires_approval';
-  startedAt: number;
+  status: TaskExecutionStatus;
+  submittedAt: number;
+  startedAt?: number;
   completedAt?: number;
   resultSummary?: string;
+  errorMessage?: string;
 }
 
 export interface OpenClawSystemStatus {
-  gatewayOnline: boolean;
+  schemaVersion: number;
+  gatewayState: 'running' | 'stopped' | 'unreachable' | 'unknown';
   gatewayPort: number;
-  agentId: string;
-  sessionState: 'ready' | 'running' | 'stopped' | 'unconfigured';
+  agentId?: string;
+  sessionState: 'running' | 'stopped' | 'unknown';
   activeHost: 'ideapad' | 'thinkbook';
-  pairedNodes: {
-    name: string;
-    host: string;
-    status: 'connected' | 'pairing_available' | 'offline';
-    isCoordinator: boolean;
-  }[];
+  coordinatorNode: OpenClawNodeInfo;
+  workstationNode: OpenClawNodeInfo;
   recentJobs: OpenClawJobSummary[];
-  lastConfirmedUpdate: number;
+  lastObservedAt: number;
+  lastCachedAt: number;
+  status: ConnectionStatus;
+}
+
+export interface TaskSubmissionResponse {
+  success: boolean;
+  status: TaskExecutionStatus;
+  message: string;
+  correlationId: string;
+  runnerJobId?: string;
+  job?: OpenClawJobSummary;
 }
 
 export type PortalMessage =

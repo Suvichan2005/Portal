@@ -351,7 +351,7 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await expect(toast).toBeVisible({ timeout: 3000 });
   });
 
-  test('15. Personal Intelligence Briefing renders top priorities, schedule, and freshness badge', async () => {
+  test('15. Personal Intelligence Briefing honest unconfigured state and user Markdown import', async () => {
     const extId = await getExtId(context);
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
@@ -360,20 +360,42 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await expect(intelSection).toBeVisible({ timeout: 5000 });
 
     const sourcePill = page.locator('#briefingSourcePill');
-    await expect(sourcePill).toContainText('Flowmate Context');
+    await expect(sourcePill).toContainText('Unconfigured');
 
-    const priorities = page.locator('#briefingPrioritiesList .briefing-item');
-    await expect(priorities.first()).toBeVisible({ timeout: 3000 });
-    expect(await priorities.count()).toBeGreaterThan(0);
+    const freshnessTag = page.locator('#briefingFreshnessTag');
+    await expect(freshnessTag).toContainText('Not connected');
 
-    const schedule = page.locator('#briefingScheduleList .briefing-item');
-    await expect(schedule.first()).toBeVisible({ timeout: 3000 });
-    expect(await schedule.count()).toBeGreaterThan(0);
+    const priorities = page.locator('#briefingPrioritiesList');
+    await expect(priorities).toContainText('No priorities configured');
+
+    // Test honest user-driven Markdown import workflow
+    const importBtn = page.locator('#importBriefingBtn');
+    await expect(importBtn).toBeVisible();
+    await importBtn.click();
+
+    const importModal = page.locator('#importBriefingModal');
+    await expect(importModal).toBeVisible();
+
+    const textarea = page.locator('#briefingImportText');
+    await textarea.fill('# Morning Priorities\n- Ship Portal v1.3.1 source integrity update\n- Run full Playwright test suite');
+
+    const submitImportBtn = page.locator('#submitImportBtn');
+    await submitImportBtn.click();
+
+    await expect(importModal).toBeHidden({ timeout: 2000 });
+
+    const toast = page.locator('#portalToast');
+    await expect(toast).toBeVisible({ timeout: 3000 });
+    await expect(toast).toContainText('Imported');
+
+    const priorityItems = page.locator('#briefingPrioritiesList .briefing-item');
+    expect(await priorityItems.count()).toBe(2);
+    await expect(sourcePill).toContainText('User Imported Markdown');
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/11-personal-briefing.png` });
   });
 
-  test('16. Important Mail Highlights with Privacy Mode toggle', async () => {
+  test('16. Important Mail Highlights unconfigured state with Privacy Mode toggle', async () => {
     const extId = await getExtId(context);
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
@@ -386,14 +408,8 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const mailPanel = page.locator('#mailPanel');
     await expect(mailPanel).toBeVisible({ timeout: 3000 });
 
-    const mailCards = page.locator('.mail-item-card');
-    await expect(mailCards.first()).toBeVisible({ timeout: 3000 });
-    expect(await mailCards.count()).toBeGreaterThan(0);
-
-    // Verify Open Thread link points to mail.google.com
-    const openLink = mailCards.first().locator('.mail-open-btn');
-    const href = await openLink.getAttribute('href');
-    expect(href).toContain('mail.google.com');
+    // Assert truthful empty state when no email connector is authorized
+    await expect(mailPanel).toContainText('No email connector configured');
 
     // Test privacy toggle: hide previews
     const privacyToggle = page.locator('#mailPrivacyToggle');
@@ -403,7 +419,7 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/12-important-mail.png` });
   });
 
-  test('17. OpenClaw Activity & Control Center with Bounded Task Submission', async () => {
+  test('17. OpenClaw Activity & Control Center displays truthful offline/unpaired state and honest task rejection', async () => {
     const extId = await getExtId(context);
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
@@ -416,14 +432,17 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const openClawPanel = page.locator('#openClawPanel');
     await expect(openClawPanel).toBeVisible({ timeout: 3000 });
 
-    // Verify Gateway port 57849 indicator
+    // Verify Gateway port 57849 indicator shows Stopped
     const gatewayLabel = page.locator('#openclawGatewayLabel');
     await expect(gatewayLabel).toContainText('57849');
+    await expect(gatewayLabel).toContainText('Stopped');
 
-    // Verify Node pills (IdeaPad and ThinkBook)
+    // Verify Node pills reflect real host state: IdeaPad OFFLINE, ThinkBook UNPAIRED
     const nodes = page.locator('.node-pill');
     await expect(nodes.first()).toBeVisible({ timeout: 3000 });
     expect(await nodes.count()).toBeGreaterThanOrEqual(2);
+    await expect(nodes.filter({ hasText: 'IdeaPad' })).toContainText('OFFLINE');
+    await expect(nodes.filter({ hasText: 'ThinkBook' })).toContainText('UNPAIRED');
 
     // Submit a bounded task
     const taskInput = page.locator('#openclawTaskInput');
@@ -432,10 +451,10 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const submitBtn = page.locator('#openclawTaskForm button');
     await submitBtn.click();
 
-    // Verify feedback toast appears confirming task was queued
+    // Verify feedback toast appears confirming task was rejected due to offline gateway
     const toast = page.locator('#portalToast');
     await expect(toast).toBeVisible({ timeout: 3000 });
-    await expect(toast).toContainText('Task queued');
+    await expect(toast).toContainText('OpenClaw Gateway is not running');
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/13-openclaw-control.png` });
   });
@@ -521,5 +540,25 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
 
     // Should not error and should cleanly execute filter
     await expect(searchInput).toHaveValue('@audio');
+  });
+
+  test('22. New Tab page makes ZERO unsolicited loopback/external network requests on load', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    const networkRequests: string[] = [];
+
+    page.on('request', (req: any) => {
+      const url = req.url();
+      if (!url.startsWith('chrome-extension://')) {
+        networkRequests.push(url);
+      }
+    });
+
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+
+    // Expect ZERO non-extension requests on cold load
+    expect(networkRequests).toEqual([]);
   });
 });
