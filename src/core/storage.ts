@@ -38,6 +38,7 @@ const STORAGE_KEYS = {
   MAIL_SNAPSHOT: 'portal_cached_mail',
   OPENCLAW_STATUS: 'portal_cached_openclaw',
   SESSIONS: 'portal_saved_sessions',
+  COMMAND_RECENCY: 'portal_recent_commands',
 } as const;
 
 class StorageService {
@@ -292,16 +293,24 @@ class StorageService {
             STORAGE_KEYS.BRIEFING,
             STORAGE_KEYS.MAIL_SNAPSHOT,
             STORAGE_KEYS.OPENCLAW_STATUS,
+            STORAGE_KEYS.COMMAND_RECENCY,
           ],
           () => resolve(),
         );
       });
     }
+    this.memoryFallback.delete(STORAGE_KEYS.INTELLIGENCE);
+    this.memoryFallback.delete(STORAGE_KEYS.DISMISSED);
+    this.memoryFallback.delete(STORAGE_KEYS.BRIEFING);
+    this.memoryFallback.delete(STORAGE_KEYS.MAIL_SNAPSHOT);
+    this.memoryFallback.delete(STORAGE_KEYS.OPENCLAW_STATUS);
+    this.memoryFallback.delete(STORAGE_KEYS.COMMAND_RECENCY);
     this.removeRaw(STORAGE_KEYS.INTELLIGENCE);
     this.removeRaw(STORAGE_KEYS.DISMISSED);
     this.removeRaw(STORAGE_KEYS.BRIEFING);
     this.removeRaw(STORAGE_KEYS.MAIL_SNAPSHOT);
     this.removeRaw(STORAGE_KEYS.OPENCLAW_STATUS);
+    this.removeRaw(STORAGE_KEYS.COMMAND_RECENCY);
   }
 
   // --- Personal Intelligence Briefing Cache ---
@@ -495,6 +504,36 @@ class StorageService {
       validUrls.forEach((u) => window.open(u, '_blank'));
     }
     return { success: true, tabCount: validUrls.length, message: `Restored workspace "${session.name}" (${validUrls.length} tabs)` };
+  }
+
+  async getRecentCommandIds(): Promise<string[]> {
+    if (this.isExtensionEnvironment()) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.COMMAND_RECENCY], (res) => {
+          resolve(res[STORAGE_KEYS.COMMAND_RECENCY] || []);
+        });
+      });
+    }
+    try {
+      const stored = this.getRaw(STORAGE_KEYS.COMMAND_RECENCY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async recordCommandExecution(commandId: string): Promise<void> {
+    const trimmed = commandId ? commandId.trim() : '';
+    if (!trimmed) return;
+    const current = await this.getRecentCommandIds();
+    const updated = [trimmed, ...current.filter((id) => id !== trimmed)].slice(0, 20);
+    if (this.isExtensionEnvironment()) {
+      await new Promise<void>((resolve) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.COMMAND_RECENCY]: updated }, () => resolve());
+      });
+    } else {
+      this.setRaw(STORAGE_KEYS.COMMAND_RECENCY, JSON.stringify(updated));
+    }
   }
 }
 

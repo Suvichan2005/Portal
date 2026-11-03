@@ -261,9 +261,13 @@ export class HistoryClusterer {
       }
     >();
 
+    // Batch dismissed items into an in-memory Set to eliminate repeated storage reads inside the loop
+    const dismissedItems = await storage.getDismissedItems();
+    const dismissedSet = new Set(dismissedItems.map((d) => d.urlOrDomain.toLowerCase().trim()));
+
     for (const item of historyItems) {
       if (!item.url || !this.isSafeUrl(item.url)) continue;
-      if (await storage.isDismissed(item.url)) continue;
+      if (dismissedSet.has(item.url.toLowerCase().trim())) continue;
 
       try {
         const normalized = this.normalizeUrl(item.url);
@@ -276,7 +280,7 @@ export class HistoryClusterer {
         }
 
         const groupKey = this.getGroupKey(u);
-        if (await storage.isDismissed(groupKey)) continue;
+        if (dismissedSet.has(groupKey.toLowerCase().trim())) continue;
 
         const existing = groupMap.get(groupKey);
         const count = item.visitCount || 1;

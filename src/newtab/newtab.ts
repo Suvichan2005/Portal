@@ -120,8 +120,9 @@ class PortalNewTabController {
     // Fast parallel loads with error isolation
     this.renderShortcuts().catch(() => {});
     this.renderOpenTabs().catch(() => {});
-    this.renderBookmarks().catch(() => {});
-    this.loadIntelligenceSurfaces().catch(() => {});
+    if (this.prefs.workspaceLayout !== 'focused' && this.prefs.showIntelligenceBriefing !== false) {
+      this.loadIntelligenceSurfaces().catch(() => {});
+    }
     this.updateAiStatusBadge().catch(() => {});
   }
 
@@ -849,6 +850,66 @@ class PortalNewTabController {
         li.appendChild(badge);
       }
 
+      // Quick result actions (Copy Link, Copy Markdown, Tab Close)
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'suggestion-actions';
+
+      if (item.url) {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'suggestion-action-btn';
+        copyBtn.title = 'Copy Link (Alt+C)';
+        copyBtn.textContent = '🔗';
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(item.url!).then(() => {
+            this.showToast(`Copied link: ${item.url}`);
+          }).catch(() => {
+            this.showToast('Could not copy link');
+          });
+        });
+        actionsDiv.appendChild(copyBtn);
+
+        const copyMdBtn = document.createElement('button');
+        copyMdBtn.className = 'suggestion-action-btn';
+        copyMdBtn.title = 'Copy Markdown (Alt+M)';
+        copyMdBtn.textContent = '📋';
+        copyMdBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const md = `[${item.title || item.url}](${item.url})`;
+          navigator.clipboard.writeText(md).then(() => {
+            this.showToast(`Copied markdown: ${md}`);
+          }).catch(() => {
+            this.showToast('Could not copy markdown');
+          });
+        });
+        actionsDiv.appendChild(copyMdBtn);
+      }
+
+      if (item.type === 'tab' && item.tabId) {
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'suggestion-action-btn';
+        closeBtn.title = 'Close Tab (Alt+W)';
+        closeBtn.textContent = '✕';
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (typeof chrome !== 'undefined' && chrome.tabs?.remove) {
+            chrome.tabs.remove(item.tabId!, () => {
+              this.currentSuggestions = this.currentSuggestions.filter((r) => r.tabId !== item.tabId);
+              if (this.selectedSuggestionIndex >= this.currentSuggestions.length) {
+                this.selectedSuggestionIndex = Math.max(0, this.currentSuggestions.length - 1);
+              }
+              this.renderSuggestions();
+              this.showToast(`Closed tab: ${item.title}`);
+            });
+          }
+        });
+        actionsDiv.appendChild(closeBtn);
+      }
+
+      if (actionsDiv.children.length > 0) {
+        li.appendChild(actionsDiv);
+      }
+
       li.addEventListener('click', (e) => this.executeSuggestion(item, e));
       li.addEventListener('mouseenter', () => {
         this.selectedSuggestionIndex = index;
@@ -919,6 +980,84 @@ class PortalNewTabController {
         this.selectedSuggestionIndex =
           (this.selectedSuggestionIndex - 1 + this.currentSuggestions.length) % this.currentSuggestions.length;
         this.updateSelectedSuggestion();
+      }
+      return;
+    }
+
+    // Secondary action: Alt+W closes selected open tab directly from results
+    if (e.altKey && (e.key === 'w' || e.key === 'W')) {
+      e.preventDefault();
+      const current = this.currentSuggestions[this.selectedSuggestionIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        if (typeof chrome !== 'undefined' && chrome.tabs?.remove) {
+          chrome.tabs.remove(current.tabId, () => {
+            this.currentSuggestions = this.currentSuggestions.filter((r) => r.tabId !== current.tabId);
+            if (this.selectedSuggestionIndex >= this.currentSuggestions.length) {
+              this.selectedSuggestionIndex = Math.max(0, this.currentSuggestions.length - 1);
+            }
+            this.renderSuggestions();
+            this.showToast(`Closed tab: ${current.title}`);
+          });
+        }
+      }
+      return;
+    }
+
+    // Secondary action: Alt+C copies URL of selected result
+    if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      const current = this.currentSuggestions[this.selectedSuggestionIndex];
+      if (current && current.url) {
+        navigator.clipboard.writeText(current.url).then(() => {
+          this.showToast(`Copied link: ${current.url}`);
+        }).catch(() => {
+          this.showToast('Could not copy link');
+        });
+      }
+      return;
+    }
+
+    // Secondary action: Alt+M copies Markdown link [title](url)
+    if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      const current = this.currentSuggestions[this.selectedSuggestionIndex];
+      if (current && current.url) {
+        const md = `[${current.title || current.url}](${current.url})`;
+        navigator.clipboard.writeText(md).then(() => {
+          this.showToast(`Copied markdown: ${md}`);
+        }).catch(() => {
+          this.showToast('Could not copy markdown');
+        });
+      }
+      return;
+    }
+
+    // Secondary action: Alt+D duplicates selected open tab
+    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      const current = this.currentSuggestions[this.selectedSuggestionIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        if (typeof chrome !== 'undefined' && chrome.tabs?.duplicate) {
+          chrome.tabs.duplicate(current.tabId, () => {
+            this.showToast(`Duplicated tab: ${current.title}`);
+          });
+        }
+      }
+      return;
+    }
+
+    // Secondary action: Alt+P pins/unpins selected open tab
+    if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      const current = this.currentSuggestions[this.selectedSuggestionIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+          chrome.tabs.update(current.tabId, { pinned: !current.pinned }, (tab) => {
+            current.pinned = tab?.pinned;
+            this.renderSuggestions();
+            this.showToast(tab?.pinned ? 'Pinned tab' : 'Unpinned tab');
+          });
+        }
       }
       return;
     }

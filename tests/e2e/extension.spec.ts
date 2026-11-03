@@ -822,4 +822,66 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const collabTag = page.locator('#collabFreshnessTag');
     await expect(collabTag).toContainText('codex-chatgpt-collab');
   });
+
+  test('33. Secondary result actions: Action items and footer hints render on search suggestions', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+    await searchInput.focus();
+    await searchInput.fill('bookmarks');
+
+    const panel = page.locator('#suggestionsPanel');
+    await expect(panel).toBeVisible({ timeout: 4000 });
+
+    const items = page.locator('.suggestion-item');
+    await expect(items.first()).toBeVisible();
+
+    // Verify secondary action buttons exist on suggestion items
+    const actionBtns = page.locator('.suggestion-action-btn');
+    const actionCount = await actionBtns.count();
+    expect(actionCount).toBeGreaterThan(0);
+
+    // Verify footer hints are visible
+    const footer = page.locator('.suggestions-footer');
+    await expect(footer).toBeVisible();
+    await expect(footer).toContainText('Alt+C Copy Link');
+    await expect(footer).toContainText('Alt+M Copy MD');
+  });
+
+  test('34. Message-First Overlay Toggle: Dispatches message to active tab and verifies handled response', async () => {
+    const extId = await getExtId(context);
+    const sw = (await context.serviceWorkers())[0];
+    const webPage = await context.newPage();
+    await webPage.goto('https://example.com');
+
+    // First cold injection
+    await sw.evaluate(async (url: string) => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find((t: any) => t.url === url);
+      if (!tab || !tab.id) throw new Error('Tab not found');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['overlay.js'],
+      });
+    }, webPage.url());
+
+    await webPage.waitForSelector('#portal-floating-launcher-root', { state: 'visible' });
+
+    // Second toggle via message-first delivery
+    const result = await sw.evaluate(async (url: string) => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find((t: any) => t.url === url);
+      if (!tab || !tab.id) return { handled: false };
+      const targetId = tab.id;
+      return new Promise<{ handled: boolean }>((resolve) => {
+        chrome.tabs.sendMessage(targetId, { type: 'PORTAL_TOGGLE_OVERLAY' }, (res) => {
+          resolve(res || { handled: false });
+        });
+      });
+    }, webPage.url());
+
+    expect(result.handled).toBe(true);
+  });
 });

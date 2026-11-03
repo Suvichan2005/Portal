@@ -7,9 +7,11 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   const ROOT_ID = 'portal-floating-launcher-root';
   const existingRoot = document.getElementById(ROOT_ID);
 
-  // If already open, toggle off cleanly by executing its registered cleanup
+  // If already open or injected, toggle cleanly
   if (existingRoot) {
-    if (typeof (existingRoot as any).__portalClose === 'function') {
+    if (typeof (existingRoot as any).__portalToggle === 'function') {
+      (existingRoot as any).__portalToggle();
+    } else if (typeof (existingRoot as any).__portalClose === 'function') {
       (existingRoot as any).__portalClose();
     } else {
       existingRoot.remove();
@@ -300,6 +302,8 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
     <div class="shortcuts">
       <span><span class="kbd-tag">↑↓</span> Navigate</span>
       <span><span class="kbd-tag">↵</span> Switch / Open</span>
+      <span><span class="kbd-tag">Alt+C</span> Copy Link</span>
+      <span><span class="kbd-tag">Alt+M</span> Copy MD</span>
       <span><span class="kbd-tag">Alt+W</span> Close Tab</span>
       <span><span class="kbd-tag">Esc</span> Close</span>
     </div>
@@ -322,11 +326,19 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   let debounceTimer: any = null;
   let searchSeq = 0;
 
-  // Cleanup helper: thoroughly releases every listener and DOM resource
+  function openOverlay() {
+    host.style.display = 'block';
+    window.addEventListener('keydown', handleGlobalKeydown, true);
+    input.value = '';
+    fetchInitialState();
+    ensureFocus();
+  }
+
+  // Cleanup helper: thoroughly releases every listener and hides/unmounts DOM
   function closeOverlay() {
     clearTimeout(debounceTimer);
     window.removeEventListener('keydown', handleGlobalKeydown, true);
-    host.remove();
+    host.style.display = 'none';
     if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
       try {
         previousActiveElement.focus();
@@ -334,8 +346,26 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
     }
   }
 
-  // Register cleanup on host node so subsequent toggle-offs invoke it cleanly
+  function toggleOverlay() {
+    if (host.style.display === 'none') {
+      openOverlay();
+    } else {
+      closeOverlay();
+    }
+  }
+
+  // Register cleanup and toggle on host node so subsequent toggle-offs invoke it cleanly
   (host as any).__portalClose = closeOverlay;
+  (host as any).__portalToggle = toggleOverlay;
+
+  // Listen for message-based instant toggle from service worker (<15ms)
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === 'PORTAL_TOGGLE_OVERLAY') {
+      toggleOverlay();
+      sendResponse({ handled: true, isOpen: host.style.display !== 'none' });
+      return true;
+    }
+  });
 
   // Scrim click closes
   scrim.addEventListener('click', (e) => {
@@ -408,10 +438,59 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         li.appendChild(badge);
       }
 
+      // Quick result actions (Copy Link, Copy Markdown, Tab Controls)
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'item-actions';
+
+      if (res.url) {
+        // Copy URL button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'action-icon-btn';
+        copyBtn.title = 'Copy Link (Alt+C)';
+        copyBtn.textContent = '🔗';
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(res.url!).then(() => {
+            showNotice(`Copied link: ${res.url}`);
+          }).catch(() => {
+            showNotice('Could not copy link');
+          });
+        });
+        actionsDiv.appendChild(copyBtn);
+
+        // Copy Markdown link button
+        const copyMdBtn = document.createElement('button');
+        copyMdBtn.className = 'action-icon-btn';
+        copyMdBtn.title = 'Copy Markdown (Alt+M)';
+        copyMdBtn.textContent = '📋';
+        copyMdBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const md = `[${res.title || res.url}](${res.url})`;
+          navigator.clipboard.writeText(md).then(() => {
+            showNotice(`Copied markdown: ${md}`);
+          }).catch(() => {
+            showNotice('Could not copy markdown');
+          });
+        });
+        actionsDiv.appendChild(copyMdBtn);
+      }
+
       // Secondary fast action buttons for open tabs
       if (res.type === 'tab' && res.tabId) {
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'item-actions';
+        // Duplicate tab button
+        const dupBtn = document.createElement('button');
+        dupBtn.className = 'action-icon-btn';
+        dupBtn.title = 'Duplicate Tab (Alt+D)';
+        dupBtn.textContent = '📑';
+        dupBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chrome.runtime.sendMessage({ type: 'PORTAL_DUPLICATE_TAB', tabId: res.tabId! }, (r) => {
+            if (r?.success) {
+              showNotice(`Duplicated tab: ${res.title}`);
+            }
+          });
+        });
+        actionsDiv.appendChild(dupBtn);
 
         // Pin / unpin button
         const pinBtn = document.createElement('button');
@@ -433,7 +512,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         // Mute / unmute button
         const muteBtn = document.createElement('button');
         muteBtn.className = 'action-icon-btn';
-        muteBtn.title = res.muted ? 'Unmute tab (Alt+M)' : 'Mute tab (Alt+M)';
+        muteBtn.title = res.muted ? 'Unmute tab (Alt+U)' : 'Mute tab (Alt+U)';
         muteBtn.textContent = res.muted ? '🔇' : '🔊';
         muteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -462,7 +541,9 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
           });
         });
         actionsDiv.appendChild(closeBtn);
+      }
 
+      if (actionsDiv.children.length > 0) {
         li.appendChild(actionsDiv);
       }
 
@@ -710,8 +791,22 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       return;
     }
 
-    // Secondary shortcut: Alt+M mutes selected tab
-    if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+    // Secondary shortcut: Alt+D duplicates selected tab
+    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.type === 'tab' && current.tabId) {
+        chrome.runtime.sendMessage({ type: 'PORTAL_DUPLICATE_TAB', tabId: current.tabId }, (r) => {
+          if (r?.success) {
+            showNotice(`Duplicated tab: ${current.title}`);
+          }
+        });
+      }
+      return;
+    }
+
+    // Secondary shortcut: Alt+U mutes selected tab
+    if (e.altKey && (e.key === 'u' || e.key === 'U')) {
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.type === 'tab' && current.tabId) {
@@ -726,15 +821,16 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       return;
     }
 
-    // Secondary shortcut: Alt+C copies URL of selected result
-    if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+    // Secondary shortcut: Alt+M copies Markdown link [title](url)
+    if (e.altKey && (e.key === 'm' || e.key === 'M')) {
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.url) {
-        navigator.clipboard.writeText(current.url).then(() => {
-          showNotice(`Copied link: ${current.url}`);
+        const md = `[${current.title || current.url}](${current.url})`;
+        navigator.clipboard.writeText(md).then(() => {
+          showNotice(`Copied markdown: ${md}`);
         }).catch(() => {
-          showNotice('Could not copy link');
+          showNotice('Could not copy markdown');
         });
       }
       return;
@@ -807,33 +903,37 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
 
   window.addEventListener('keydown', handleGlobalKeydown, true);
 
-  // Initial load: fetch MRU tabs and preferences from service worker
-  chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
-    if (chrome.runtime.lastError || !res) {
+  // Fetch MRU tabs and preferences from service worker
+  function fetchInitialState() {
+    chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
+      if (chrome.runtime.lastError || !res) {
+        if (input.value.trim()) {
+          performSearch(input.value);
+        }
+        return;
+      }
+
+      initialState = res;
+      if (res.shortcutLabel) {
+        kbdHint.textContent = res.shortcutLabel;
+      }
+
+      // If user already typed before initial state arrived, search their query
       if (input.value.trim()) {
         performSearch(input.value);
+        return;
       }
-      return;
-    }
 
-    initialState = res;
-    if (res.shortcutLabel) {
-      kbdHint.textContent = res.shortcutLabel;
-    }
+      // Default empty state: display MRU open tabs with previously active tab at selectedIndex = 0!
+      if (res.openTabs && res.openTabs.length > 0) {
+        currentResults = res.openTabs;
+        selectedIndex = 0;
+        renderResults();
+      }
+    });
+  }
 
-    // If user already typed before initial state arrived, search their query
-    if (input.value.trim()) {
-      performSearch(input.value);
-      return;
-    }
-
-    // Default empty state: display MRU open tabs with previously active tab at selectedIndex = 0!
-    if (res.openTabs && res.openTabs.length > 0) {
-      currentResults = res.openTabs;
-      selectedIndex = 0;
-      renderResults();
-    }
-  });
+  fetchInitialState();
 
   // Verified robust focus handoff onto search input
   function ensureFocus() {

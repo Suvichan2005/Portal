@@ -104,6 +104,14 @@ async function handleToggleLauncher(tab?: chrome.tabs.Tab) {
 
   if (isInjectable) {
     try {
+      // Message-first delivery: if overlay is already injected in this tab, toggle it immediately (<15ms)
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'PORTAL_TOGGLE_OVERLAY' });
+      if (res && res.handled) return;
+    } catch {
+      // Content script not yet present; inject it
+    }
+
+    try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['overlay.js'],
@@ -234,13 +242,16 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
     }
 
     case 'PORTAL_GET_INITIAL_STATE': {
-      const prefs = await storage.getPreferences();
-      const pinned = await storage.getPinnedShortcuts();
-      const intel = await storage.getIntelligence();
+      // Parallelize state queries to minimize overlay render latency
+      const [prefs, pinned, intel, tabs, history] = await Promise.all([
+        storage.getPreferences(),
+        storage.getPinnedShortcuts(),
+        storage.getIntelligence(),
+        chrome.tabs.query({}),
+        getMruHistory(),
+      ]);
       const recentClusters = intel?.clusters || [];
-      const tabs = await chrome.tabs.query({});
 
-      const history = await getMruHistory();
       // Sort tabs by MRU order:
       // Priority 1: Position in mruTabHistory
       // Priority 2: tab.lastAccessed timestamp
@@ -411,6 +422,7 @@ async function executePortalAction(
   if (item.type === 'command' && item.commandId) {
     const cmd = COMMANDS.find((c) => c.id === item.commandId);
     if (cmd) {
+      await storage.recordCommandExecution(item.commandId).catch(() => {});
       const res = await cmd.execute({
         windowId: sender.tab?.windowId,
         tabId: sender.tab?.id,

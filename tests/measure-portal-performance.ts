@@ -96,9 +96,22 @@ async function benchmarkPortal() {
   }, targetUrl);
 
   await webPage.waitForSelector('#portal-floating-launcher-root', { state: 'visible' });
-  const overlayLatency = performance.now() - tInjectStart;
+  const coldOverlayLatency = performance.now() - tInjectStart;
+  console.log(`Floating Launcher Cold Injection Latency: ${coldOverlayLatency.toFixed(2)} ms`);
 
-  console.log(`Floating Launcher Summon & Render Latency: ${overlayLatency.toFixed(2)} ms`);
+  // 4. Message-First Warm Overlay Toggle Latency
+  const tWarmStart = performance.now();
+  await sw.evaluate(async (url: string) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((t: any) => t.url === url);
+    if (!tab || !tab.id) throw new Error('Tab not found');
+    const targetId = tab.id;
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(targetId, { type: 'PORTAL_TOGGLE_OVERLAY' }, resolve);
+    });
+  }, targetUrl);
+  const warmOverlayLatency = performance.now() - tWarmStart;
+  console.log(`Floating Launcher Message-First Warm Summon Latency: ${warmOverlayLatency.toFixed(2)} ms`);
 
   await context.close();
 
@@ -111,7 +124,8 @@ async function benchmarkPortal() {
   console.log(`DOM Interactive: ${perfMetrics.domInteractive.toFixed(2)} ms (Baseline: 18.30 ms)`);
   console.log(`DOM Content Loaded: ${perfMetrics.domContentLoaded.toFixed(2)} ms (Baseline: 18.40 ms)`);
   console.log(`JS Heap Used: ${perfMetrics.jsHeapUsedMB} MB`);
-  console.log(`Summon Latency: ${overlayLatency.toFixed(2)} ms`);
+  console.log(`Cold Summon Latency: ${coldOverlayLatency.toFixed(2)} ms`);
+  console.log(`Warm Summon Latency: ${warmOverlayLatency.toFixed(2)} ms`);
 }
 
 benchmarkPortal().catch(console.error);

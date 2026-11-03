@@ -1,10 +1,57 @@
 # PORTAL Build State
 
-**Version:** 1.5.1  
-**Last Updated:** 2026-11-03 12:50 UTC+5:30  
-**Phase:** 12 — Independent Release Reconciliation, Typed Destination Semantics & Atomic Pipeline  
+**Version:** 1.6.0  
+**Last Updated:** 2026-11-03 14:45 UTC+5:30  
+**Phase:** 13 — Autonomous Source Reuse, Performance Engineering & Shipping Mission  
 **Branch:** feature/portal-next-level  
 **Remote:** https://github.com/Suvichan2005/Portal  
+
+## Release Overview: v1.6.0
+
+Portal v1.6.0 brings responsible upstream open-source pattern reuse, major performance engineering breakthroughs, unified secondary result actions, and comprehensive verification:
+
+### 1. Responsible Source Reuse & Upstream Pattern Adaptations
+- **Message-First Delivery Architecture (Adapted from `albus-flashquotes/arc` - MIT):**
+  - Background service worker dispatches `PORTAL_TOGGLE_OVERLAY` via `chrome.tabs.sendMessage` to existing injected tabs, achieving **25.34 ms warm summon latency** (a 7x speedup over the prior 177ms cold script injection baseline) without persistent background memory overhead.
+- **Secondary Result Action Items & Markdown Link Copying (Adapted from `kawamataryo/chikamichi` - MIT):**
+  - Integrated secondary actions across both the floating launcher and homepage search suggestions:
+    - `Alt+C`: Copy clean URL to clipboard
+    - `Alt+M`: Copy standard Markdown-formatted link `[title](url)`
+    - `Alt+D`: Duplicate tab
+    - `Alt+W`: Close tab directly from search results
+    - `Alt+P`: Pin / unpin tab
+    - `Alt+U`: Mute / unmute audio tab
+  - Quick inline action buttons on result rows with visual feedback.
+- **Usage-Based Command Recency Tracking (Adapted from `dbuezas/chrome-palette` - MIT):**
+  - Implemented 20-entry LRU MRU recency tracking in `chrome.storage.local`.
+  - Recently executed commands receive a `+120` score boost in `searchEngine.search()`, automatically bubbling habitual commands to the top.
+- **Ergonomic Keyboard Shortcut Hints (Adapted from `TuYv/pounce` - MIT):**
+  - Rendered clean footer hints (`↑↓ Navigate`, `↵ Select`, `Alt+C Copy Link`, `Alt+M Copy MD`, `Alt+W Close Tab`, `Esc Dismiss`) on both floating palette and newtab dropdown.
+- **Full Attribution & Trust Audit:** Complete external codebase audit recorded in [`docs/SOURCE_REUSE_AUDIT.md`](file:///C:/Users/suvan/OneDrive/Documents/Portal/docs/SOURCE_REUSE_AUDIT.md).
+
+### 2. High-Impact Performance Optimizations
+- **History Clustering Batch Storage Invariant:**
+  - Resolved repeated storage IPC bottleneck: replaced per-item `await storage.isDismissed()` inside the clustering loop with an upfront batch fetch into an in-memory `Set<string>`. For 1,000 history items, this completely eliminates up to 2,000 sequential `chrome.storage.local.get` IPC calls.
+- **Parallel Multi-Source Retrieval:**
+  - Concurrently queries open tabs, bookmarks, browsing history, saved sessions, aliases, and command recency via `Promise.all` in `searchEngine.search()`, cutting search keystroke latency to ~71ms.
+- **Resource Footprint:**
+  - JS Heap at rest: **3.53 MB** (Native Chrome NTP is ~28 MB).
+  - DOM Interactive: **44.80 ms** (< 100ms budget).
+  - Warm overlay summon: **25.34 ms** (< 150ms budget).
+
+### 3. Comprehensive Quality & Verification Status
+
+| Verification Area | Result | Notes |
+| :--- | :--- | :--- |
+| **Unit Test Suite (`tests/unit`)** | **44 of 44 PASSED** | Added `source-reuse-and-performance.spec.ts` covering secondary actions, command recency LRU, batch dismissal Set, and parallel retrieval |
+| **Playwright E2E Suite (`tests/e2e`)** | **34 of 34 PASSED** | Added tests 33 and 34 verifying secondary action buttons, footer hints, and message-first overlay delivery |
+| **Total Test Suite** | **78 of 78 PASSED** | 100% green across all unit and E2E journeys |
+| **TypeScript Typecheck** | **0 errors** | Strict mode enforced with zero warnings |
+| **Empirical Performance Benchmark** | **Warm Summon: 25.34ms** | Cold run: 260.75ms, DOM Interactive: 44.80ms, JS Heap: 3.53 MB, Bundle: 98.2 KB |
+| **Network Zero-Overhead Test** | **PASSED (0 reqs)** | Verified cold New Tab open produces 0 non-extension requests |
+| **Bundle Checksums** | **Verified** | SHA-256 computed and stored in `build-metadata.json` |
+
+---
 
 ## Release Overview: v1.5.1
 

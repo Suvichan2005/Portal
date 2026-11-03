@@ -32,9 +32,10 @@ export class SearchEngine {
    */
   async search(
     query: string,
-    preferences: UserPreferences,
+    preferences?: UserPreferences,
     options?: { context?: 'overlay' | 'newtab'; currentTabId?: number },
   ): Promise<SearchResult[]> {
+    const prefs = preferences || (await storage.getPreferences());
     const rawQ = cleanPastedInput(query);
     const resultsMap = new Map<string, SearchResult>();
 
@@ -76,7 +77,7 @@ export class SearchEngine {
           badge: `@${bang.prefix.toUpperCase()}`,
         });
       } else {
-        PROVIDER_BANGS.slice(0, preferences.maxSuggestions || 8).forEach((b) => {
+        PROVIDER_BANGS.slice(0, prefs.maxSuggestions || 8).forEach((b) => {
           resultsMap.set(`bang-${b.prefix}`, {
             id: `bang-${b.prefix}`,
             type: 'web',
@@ -89,12 +90,50 @@ export class SearchEngine {
           });
         });
       }
-      return Array.from(resultsMap.values()).slice(0, preferences.maxSuggestions || 10);
+      return Array.from(resultsMap.values()).slice(0, prefs.maxSuggestions || 10);
     }
+
+    // Parallel Source Query: fetch independent data sources concurrently with Promise.all
+    // to minimize keystroke latency and eliminate sequential IPC bottlenecks
+    const [aliases, sessions, tabs, bookmarks, historyItems, pinned, intel, dismissedItems, recentCmdIds] = await Promise.all([
+      filterScope === 'all' && q.length > 0 ? storage.getAliases().catch(() => []) : Promise.resolve([]),
+      filterScope === 'all' || filterScope === 'commands' || filterScope === 'tabs'
+        ? storage.getSavedSessions().catch(() => [])
+        : Promise.resolve([]),
+      (filterScope === 'all' || filterScope === 'tabs' || filterScope === 'audio' || filterScope === 'site') &&
+      this.isExt() &&
+      chrome.tabs
+        ? chrome.tabs.query({}).catch(() => [])
+        : Promise.resolve([]),
+      (filterScope === 'all' || filterScope === 'bookmarks' || filterScope === 'site') &&
+      this.isExt() &&
+      chrome.bookmarks
+        ? new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
+            if (!q) chrome.bookmarks.getRecent(12, resolve);
+            else chrome.bookmarks.search(q, resolve);
+          }).catch(() => [])
+        : Promise.resolve([]),
+      (filterScope === 'all' || filterScope === 'history' || filterScope === 'site') &&
+      this.isExt() &&
+      chrome.history
+        ? new Promise<chrome.history.HistoryItem[]>((resolve) => {
+            const searchText = filterScope === 'site' && grammar.siteDomain ? (q || grammar.siteDomain) : q;
+            const maxResults = filterScope === 'site' ? 100 : 40;
+            const startTime = Date.now() - (filterScope === 'site' ? 90 : 30) * 86400000;
+            chrome.history.search({ text: searchText, maxResults, startTime }, resolve);
+          }).catch(() => [])
+        : Promise.resolve([]),
+      filterScope === 'all' ? storage.getPinnedShortcuts().catch(() => []) : Promise.resolve([]),
+      !q && filterScope === 'all' ? storage.getIntelligence().catch(() => null) : Promise.resolve(null),
+      !q && filterScope === 'all' ? storage.getDismissedItems().catch(() => []) : Promise.resolve([]),
+      filterScope === 'all' || filterScope === 'commands' ? storage.getRecentCommandIds().catch(() => []) : Promise.resolve([]),
+    ]);
+
+    const dismissedSet = new Set((dismissedItems || []).map((d) => d.urlOrDomain.toLowerCase().trim()));
+    const recentCmdSet = new Set(recentCmdIds || []);
 
     // 4. Custom aliases (in general search)
     if (filterScope === 'all' && q.length > 0) {
-      const aliases = await storage.getAliases();
       for (const alias of aliases) {
         if (alias.keyword.toLowerCase() === q.toLowerCase()) {
           const norm = this.normalizeUrl(alias.destinationUrl);
@@ -113,7 +152,7 @@ export class SearchEngine {
       }
     }
 
-    // 5. Browser Commands (when in all or commands mode)
+    // 5. Browser Commands (when in all or commands mode, with usage-based recency boost)
     if (filterScope === 'all' || filterScope === 'commands') {
       for (const cmd of COMMANDS) {
         const titleMatch = scoreStringMatch(q, cmd.title);
@@ -135,17 +174,24 @@ export class SearchEngine {
           cmd.id === 'open-clipboard-url' ||
           cmd.id === 'save-current-session';
 
+        const isRecent = recentCmdSet.has(cmd.id);
+        const recencyBonus = isRecent ? 120 : 0;
         const isDefaultCmd = !q && isPriorityCmd;
-        if (bestScore > 100 || (filterScope === 'commands' && !q) || isDefaultCmd) {
+        if (bestScore > 100 || (filterScope === 'commands' && !q) || isDefaultCmd || (isRecent && !q)) {
           const priorityBonus = isPriorityCmd && !q ? 80 : 0;
           resultsMap.set(`cmd-${cmd.id}`, {
             id: `cmd-${cmd.id}`,
             type: 'command',
             title: cmd.title,
             description: cmd.description,
-            score: filterScope === 'commands'
-              ? (bestScore > 0 ? bestScore + 800 : 400 + priorityBonus)
-              : (bestScore > 0 ? bestScore + 180 : 70 + priorityBonus),
+            score:
+              (filterScope === 'commands'
+                ? bestScore > 0
+                  ? bestScore + 800
+                  : 400 + priorityBonus
+                : bestScore > 0
+                  ? bestScore + 180
+                  : 70 + priorityBonus) + recencyBonus,
             commandId: cmd.id,
             badge: 'COMMAND',
           });
@@ -155,206 +201,169 @@ export class SearchEngine {
 
     // 6. Search Saved Sessions (in all, commands, or tabs mode)
     if (filterScope === 'all' || filterScope === 'commands' || filterScope === 'tabs') {
-      try {
-        const sessions = await storage.getSavedSessions();
-        for (const s of sessions) {
-          const nameMatch = scoreStringMatch(q, s.name);
-          let tabMatchScore = 0;
-          for (const tab of s.tabs.slice(0, 5)) {
-            const tm = scoreStringMatch(q, tab.title || tab.url);
-            if (tm.score > tabMatchScore) tabMatchScore = tm.score;
-          }
-          const bestScore = Math.max(nameMatch.score, tabMatchScore * 0.7);
-          const shouldInclude = bestScore > 0 || (q.toLowerCase().includes('session') && !nameMatch.score) || (!q && filterScope === 'commands');
-          if (shouldInclude) {
-            resultsMap.set(`saved-${s.id}`, {
-              id: `saved-${s.id}`,
-              type: 'command',
-              title: `Restore Session: ${s.name}`,
-              description: `Saved workspace with ${s.tabCount} tab(s) • ${new Date(s.savedAt).toLocaleDateString()}`,
-              score: 350 + (bestScore > 0 ? bestScore : 40),
-              commandId: 'restore-saved-session',
-              sessionId: s.id, // Explicit target session ID!
-              badge: 'SESSION',
-            });
-          }
+      for (const s of sessions) {
+        const nameMatch = scoreStringMatch(q, s.name);
+        let tabMatchScore = 0;
+        for (const tab of s.tabs.slice(0, 5)) {
+          const tm = scoreStringMatch(q, tab.title || tab.url);
+          if (tm.score > tabMatchScore) tabMatchScore = tm.score;
         }
-      } catch {}
+        const bestScore = Math.max(nameMatch.score, tabMatchScore * 0.7);
+        const shouldInclude =
+          bestScore > 0 ||
+          (q.toLowerCase().includes('session') && !nameMatch.score) ||
+          (!q && filterScope === 'commands');
+        if (shouldInclude) {
+          resultsMap.set(`saved-${s.id}`, {
+            id: `saved-${s.id}`,
+            type: 'command',
+            title: `Restore Session: ${s.name}`,
+            description: `Saved workspace with ${s.tabCount} tab(s) • ${new Date(s.savedAt).toLocaleDateString()}`,
+            score: 350 + (bestScore > 0 ? bestScore : 40),
+            commandId: 'restore-saved-session',
+            sessionId: s.id, // Explicit target session ID!
+            badge: 'SESSION',
+          });
+        }
+      }
     }
 
     // 7. Search Open Tabs (when in all, tabs, audio, or site scope)
-    if (
-      (filterScope === 'all' || filterScope === 'tabs' || filterScope === 'audio' || filterScope === 'site') &&
-      this.isExt() &&
-      chrome.tabs
-    ) {
-      try {
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-          if (!tab.url || tab.url.startsWith('chrome://newtab')) continue;
-          if (filterScope === 'audio' && !tab.audible) continue;
-          if (filterScope === 'site' && grammar.siteDomain && !tab.url.toLowerCase().includes(grammar.siteDomain)) {
-            continue;
-          }
-          if (options?.context === 'overlay' && options?.currentTabId && tab.id === options.currentTabId && !q) {
-            continue; // Skip the active tab itself in overlay empty state
-          }
+    if (filterScope === 'all' || filterScope === 'tabs' || filterScope === 'audio' || filterScope === 'site') {
+      for (const tab of tabs) {
+        if (!tab.url || tab.url.startsWith('chrome://newtab')) continue;
+        if (filterScope === 'audio' && !tab.audible) continue;
+        if (filterScope === 'site' && grammar.siteDomain && !tab.url.toLowerCase().includes(grammar.siteDomain)) {
+          continue;
+        }
+        if (options?.context === 'overlay' && options?.currentTabId && tab.id === options.currentTabId && !q) {
+          continue; // Skip the active tab itself in overlay empty state
+        }
 
-          const norm = this.normalizeUrl(tab.url);
-          const titleMatch = scoreStringMatch(q, tab.title || '');
-          const urlMatch = scoreStringMatch(q, tab.url);
-          const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.85);
+        const norm = this.normalizeUrl(tab.url);
+        const titleMatch = scoreStringMatch(q, tab.title || '');
+        const urlMatch = scoreStringMatch(q, tab.url);
+        const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.85);
 
-          if (bestMatch > 0 || !q || filterScope === 'audio') {
-            const audioBonus = tab.audible ? 250 : 0;
-            // Tabs have strong preference over reopening the same URL from web or history
-            const baseTabScore = 800;
-            const score = filterScope === 'audio'
+        if (bestMatch > 0 || !q || filterScope === 'audio') {
+          const audioBonus = tab.audible ? 250 : 0;
+          const baseTabScore = 800;
+          const score =
+            filterScope === 'audio'
               ? 1200 + (bestMatch > 0 ? bestMatch : 0)
               : filterScope === 'tabs'
                 ? (bestMatch > 0 ? bestMatch + 900 : 500) + audioBonus
                 : (bestMatch > 0 ? bestMatch + baseTabScore : 300) + audioBonus;
 
-            const existing = resultsMap.get(norm);
-            if (!existing || existing.score < score) {
-              resultsMap.set(norm, {
-                id: `tab-${tab.id}`,
-                type: 'tab',
-                title: tab.title || tab.url,
-                url: tab.url,
-                description: tab.audible
-                  ? `Playing audio 🔊 • ${new URL(tab.url).hostname}`
-                  : `Open tab • ${new URL(tab.url).hostname}`,
-                favicon: tab.favIconUrl || getFaviconUrl(tab.url),
-                score,
-                tabId: tab.id,
-                windowId: tab.windowId,
-                badge: tab.audible ? 'AUDIO 🔊' : 'SWITCH TAB',
-                audible: tab.audible,
-                muted: tab.mutedInfo?.muted,
-              });
-            } else if (existing) {
-              existing.badge = tab.audible ? 'AUDIO 🔊' : 'OPEN TAB';
-              existing.tabId = tab.id;
-              existing.windowId = tab.windowId;
-              existing.audible = tab.audible;
-            }
+          const existing = resultsMap.get(norm);
+          if (!existing || existing.score < score) {
+            resultsMap.set(norm, {
+              id: `tab-${tab.id}`,
+              type: 'tab',
+              title: tab.title || tab.url,
+              url: tab.url,
+              description: tab.audible
+                ? `Playing audio 🔊 • ${new URL(tab.url).hostname}`
+                : `Open tab • ${new URL(tab.url).hostname}`,
+              favicon: tab.favIconUrl || getFaviconUrl(tab.url),
+              score,
+              tabId: tab.id,
+              windowId: tab.windowId,
+              badge: tab.audible ? 'AUDIO 🔊' : 'SWITCH TAB',
+              audible: tab.audible,
+              muted: tab.mutedInfo?.muted,
+            });
+          } else if (existing) {
+            existing.badge = tab.audible ? 'AUDIO 🔊' : 'OPEN TAB';
+            existing.tabId = tab.id;
+            existing.windowId = tab.windowId;
+            existing.audible = tab.audible;
           }
         }
-      } catch (err) {
-        console.warn('[SearchEngine] Open tabs query error:', err);
       }
     }
 
     // 8. Search Bookmarks (when in all, bookmarks, or site scope)
-    if ((filterScope === 'all' || filterScope === 'bookmarks' || filterScope === 'site') && this.isExt() && chrome.bookmarks) {
-      try {
-        const bookmarks = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
-          if (!q) {
-            chrome.bookmarks.getRecent(12, resolve);
+    if (filterScope === 'all' || filterScope === 'bookmarks' || filterScope === 'site') {
+      for (const bm of bookmarks) {
+        if (!bm.url) continue;
+        if (filterScope === 'site' && grammar.siteDomain && !bm.url.toLowerCase().includes(grammar.siteDomain)) {
+          continue;
+        }
+        const norm = this.normalizeUrl(bm.url);
+        const titleMatch = scoreStringMatch(q, bm.title);
+        const urlMatch = scoreStringMatch(q, bm.url);
+        const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
+
+        if (bestMatch > 0 || !q) {
+          const score =
+            filterScope === 'bookmarks'
+              ? bestMatch > 0
+                ? bestMatch + 600
+                : 350
+              : bestMatch > 0
+                ? bestMatch + 220
+                : 140;
+          const existing = resultsMap.get(norm);
+          if (!existing) {
+            resultsMap.set(norm, {
+              id: `bm-${bm.id}`,
+              type: 'bookmark',
+              title: bm.title || bm.url,
+              url: bm.url,
+              description: `Bookmark • ${new URL(bm.url).hostname}`,
+              favicon: getFaviconUrl(bm.url),
+              score,
+              badge: 'BOOKMARK',
+            });
           } else {
-            chrome.bookmarks.search(q, resolve);
-          }
-        });
-
-        for (const bm of bookmarks) {
-          if (!bm.url) continue;
-          if (filterScope === 'site' && grammar.siteDomain && !bm.url.toLowerCase().includes(grammar.siteDomain)) {
-            continue;
-          }
-          const norm = this.normalizeUrl(bm.url);
-          const titleMatch = scoreStringMatch(q, bm.title);
-          const urlMatch = scoreStringMatch(q, bm.url);
-          const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
-
-          if (bestMatch > 0 || !q) {
-            const score = filterScope === 'bookmarks'
-              ? (bestMatch > 0 ? bestMatch + 600 : 350)
-              : (bestMatch > 0 ? bestMatch + 220 : 140);
-            const existing = resultsMap.get(norm);
-            if (!existing) {
-              resultsMap.set(norm, {
-                id: `bm-${bm.id}`,
-                type: 'bookmark',
-                title: bm.title || bm.url,
-                url: bm.url,
-                description: `Bookmark • ${new URL(bm.url).hostname}`,
-                favicon: getFaviconUrl(bm.url),
-                score,
-                badge: 'BOOKMARK',
-              });
-            } else {
-              existing.badge = existing.badge ? `${existing.badge} • STARRED` : 'BOOKMARK';
-            }
+            existing.badge = existing.badge ? `${existing.badge} • STARRED` : 'BOOKMARK';
           }
         }
-      } catch (err) {
-        console.warn('Error querying bookmarks:', err);
       }
     }
 
     // 9. Search History (when in all, history, or site scope)
-    if ((filterScope === 'all' || filterScope === 'history' || filterScope === 'site') && this.isExt() && chrome.history) {
-      try {
-        const searchText = filterScope === 'site' && grammar.siteDomain
-          ? (q ? q : grammar.siteDomain)
-          : q;
-        const maxResults = filterScope === 'site' ? 100 : 40;
-        const startTime = Date.now() - (filterScope === 'site' ? 90 : 30) * 24 * 60 * 60 * 1000;
+    if (filterScope === 'all' || filterScope === 'history' || filterScope === 'site') {
+      for (const item of historyItems) {
+        if (!item.url || item.url.startsWith('chrome://newtab')) continue;
+        if (filterScope === 'site' && grammar.siteDomain && !item.url.toLowerCase().includes(grammar.siteDomain)) {
+          continue;
+        }
+        const norm = this.normalizeUrl(item.url);
+        const titleMatch = scoreStringMatch(q, item.title || '');
+        const urlMatch = scoreStringMatch(q, item.url);
+        const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
 
-        const historyItems = await new Promise<chrome.history.HistoryItem[]>((resolve) => {
-          chrome.history.search(
-            {
-              text: searchText,
-              maxResults,
-              startTime,
-            },
-            resolve,
-          );
-        });
-
-        for (const item of historyItems) {
-          if (!item.url || item.url.startsWith('chrome://newtab')) continue;
-          if (filterScope === 'site' && grammar.siteDomain && !item.url.toLowerCase().includes(grammar.siteDomain)) {
-            continue;
-          }
-          const norm = this.normalizeUrl(item.url);
-          const titleMatch = scoreStringMatch(q, item.title || '');
-          const urlMatch = scoreStringMatch(q, item.url);
-          const bestMatch = Math.max(titleMatch.score, urlMatch.score * 0.8);
-
-          if (bestMatch > 0 || !q) {
-            const recencyBonus = computeRecencyBonus(item.lastVisitTime);
-            const frequencyBonus = computeFrequencyBonus(item.visitCount);
-            const score = filterScope === 'history'
+        if (bestMatch > 0 || !q) {
+          const recencyBonus = computeRecencyBonus(item.lastVisitTime);
+          const frequencyBonus = computeFrequencyBonus(item.visitCount);
+          const score =
+            filterScope === 'history'
               ? (bestMatch > 0 ? bestMatch + 500 : 250) + recencyBonus + frequencyBonus
               : (bestMatch > 0 ? bestMatch + 160 : 80) + recencyBonus + frequencyBonus;
 
-            const existing = resultsMap.get(norm);
-            if (!existing) {
-              resultsMap.set(norm, {
-                id: `hist-${item.id}`,
-                type: 'history',
-                title: item.title || item.url,
-                url: item.url,
-                description: `Visited • ${new URL(item.url).hostname}`,
-                favicon: getFaviconUrl(item.url),
-                score,
-                visitCount: item.visitCount,
-                lastVisitTime: item.lastVisitTime,
-                badge: 'HISTORY',
-              });
-            }
+          const existing = resultsMap.get(norm);
+          if (!existing) {
+            resultsMap.set(norm, {
+              id: `hist-${item.id}`,
+              type: 'history',
+              title: item.title || item.url,
+              url: item.url,
+              description: `Visited • ${new URL(item.url).hostname}`,
+              favicon: getFaviconUrl(item.url),
+              score,
+              visitCount: item.visitCount,
+              lastVisitTime: item.lastVisitTime,
+              badge: 'HISTORY',
+            });
           }
         }
-      } catch (err) {
-        console.warn('Error querying history:', err);
       }
     }
 
     // 10. Pinned Shortcuts (in general search)
     if (filterScope === 'all') {
-      const pinned = await storage.getPinnedShortcuts();
       for (const p of pinned) {
         const norm = this.normalizeUrl(p.url);
         const titleMatch = scoreStringMatch(q, p.customTitle || p.title);
@@ -383,32 +392,29 @@ export class SearchEngine {
       }
     }
 
-    // 11. Intelligent History Recommendations (for empty query)
-    if (!q && filterScope === 'all') {
-      const intel = await storage.getIntelligence();
-      if (intel && intel.clusters) {
-        for (const cluster of intel.clusters.slice(0, 6)) {
-          const norm = this.normalizeUrl(cluster.primaryUrl);
-          if (await storage.isDismissed(norm)) continue;
-          if (!resultsMap.has(norm)) {
-            resultsMap.set(norm, {
-              id: cluster.id,
-              type: 'ai_cluster',
-              title: cluster.topic,
-              url: cluster.primaryUrl,
-              description: `Frequent destination • ${cluster.domain}`,
-              favicon: getFaviconUrl(cluster.primaryUrl),
-              score: 220,
-              badge: 'FREQUENT',
-            });
-          }
+    // 11. Intelligent History Recommendations (for empty query, with in-memory dismissed filter)
+    if (!q && filterScope === 'all' && intel && intel.clusters) {
+      for (const cluster of intel.clusters.slice(0, 6)) {
+        const norm = this.normalizeUrl(cluster.primaryUrl);
+        if (dismissedSet.has(norm)) continue;
+        if (!resultsMap.has(norm)) {
+          resultsMap.set(norm, {
+            id: cluster.id,
+            type: 'ai_cluster',
+            title: cluster.topic,
+            url: cluster.primaryUrl,
+            description: `Frequent destination • ${cluster.domain}`,
+            favicon: getFaviconUrl(cluster.primaryUrl),
+            score: 220,
+            badge: 'FREQUENT',
+          });
         }
       }
     }
 
     // 12. Web Search Fallback (when query is typed and not in scoped modes)
     if (q.length > 0 && filterScope === 'all') {
-      const searchEngine = preferences.searchEngine || 'google';
+      const searchEngine = prefs.searchEngine || 'google';
       const searchUrl =
         searchEngine === 'duckduckgo'
           ? `https://duckduckgo.com/?q=${encodeURIComponent(q)}`

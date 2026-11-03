@@ -79,3 +79,9 @@
 | **66. Research Query Recognition & Single-Visit Noise Filtering** | `PASSED-UNIT` | Verified in Unit Test 2: Searches with >= 2 visits form research destinations; 1-visit one-offs filtered out |
 | **67. Prompt API 7-Stage Capability Tracking** | `PASSED-UNIT` | Verified in Unit Test 4: Distinguishes unavailable, downloadable, ready, and inference_applied states honestly |
 | **68. Lock-Protected Atomic NTFS Staging Pipeline** | `PASSED-REAL` | Verified in `scripts/sync-release.ps1`: `.deploy.lock`, `$LASTEXITCODE` checks, fast-forward pull, and 5-artifact validation |
+| **69. Secondary Result Actions & Inline Action Buttons** | `PASSED-REAL` | Verified in E2E Test 33 & Unit Test 1: Action items (Copy Link, Copy MD) and keyboard shortcuts (`Alt+C`, `Alt+M`, `Alt+W`, `Alt+D`, `Alt+P`) |
+| **70. Message-First Overlay Toggle Delivery** | `PASSED-REAL` | Verified in E2E Test 34: `PORTAL_TOGGLE_OVERLAY` toggles existing injected content script in <25ms without reinjecting script |
+| **71. Usage-Based Command Recency Ranking (MRU)** | `PASSED-UNIT` | Verified in Source Reuse Unit Tests 2-3 & 5: Stores 20 recent commands in LRU order; grants +120 recency boost to elevate repeated actions |
+| **72. Batch Dismissal Set in History Clustering** | `PASSED-UNIT` | Verified in Source Reuse Unit Test 4: Replaced per-item async storage reads with upfront batch `Set<string>`, eliminating 2,000 IPC calls |
+| **73. Parallel Multi-Source Search Retrieval** | `PASSED-UNIT` | Verified in Source Reuse Unit Test 5-6: Concurrent `Promise.all` across tabs, bookmarks, history, sessions, and aliases cuts keystroke latency |
+| **74. Ergonomic Keyboard Shortcut Hints Footer** | `PASSED-REAL` | Verified in E2E Test 33: Renders footer hints (`↑↓ Navigate`, `↵ Select`, `Alt+C Copy Link`, `Alt+M Copy MD`, `Alt+W Close Tab`, `Esc Dismiss`) |
