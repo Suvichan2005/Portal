@@ -6,9 +6,9 @@
   <meta name="color-scheme" content="light dark">
   <title>New Tab</title>
   <link rel="icon" type="image/png" href="/assets/icon-48-CQVsCAHD.png">
-  <script type="module" crossorigin src="/assets/newtab-Ciy_8YGl.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/briefing-service-CRueiOys.js">
-  <link rel="stylesheet" crossorigin href="/assets/newtab-DFiYBpAZ.css">
+  <script type="module" crossorigin src="/assets/newtab-B0qyhQUt.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/briefing-service-DcJ6pkFC.js">
+  <link rel="stylesheet" crossorigin href="/assets/newtab-w46msjoP.css">
 </head>
 <body>
   <!-- Ambient background glow -->
@@ -138,14 +138,14 @@
               <span class="freshness-tag" id="placementFreshnessTag">Unconfigured • Ready to connect</span>
             </div>
             <div style="display:flex; gap:6px;">
-              <a href="https://placement.local" target="_blank" class="intel-privacy-toggle" id="openPlacementLink">Open Tracker ↗</a>
+              <span class="intel-privacy-toggle" style="cursor:default;opacity:0.75;">Disconnected Adapter</span>
             </div>
           </div>
           <div class="briefing-grid">
             <div class="briefing-col">
               <h3 class="briefing-subtitle">Active Applications</h3>
               <div id="placementApplicationsList" class="briefing-list">
-                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No active applications linked. Connect Placement OS or import pipeline.</div>
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No active applications linked. Configure local bridge or import pipeline.</div>
               </div>
             </div>
             <div class="briefing-col">
@@ -161,11 +161,11 @@
         <div class="intel-panel hidden" id="collabPanel">
           <div class="intel-header-row">
             <div class="intel-source-meta" id="collabMeta">
-              <span class="source-pill" id="collabSourcePill">AgenticCollab Archive</span>
-              <span class="freshness-tag" id="collabFreshnessTag">Local Archive (Port 8765)</span>
+              <span class="source-pill" id="collabSourcePill">AgenticCollab</span>
+              <span class="freshness-tag" id="collabFreshnessTag">Workspace: Documents/codex-chatgpt-collab</span>
             </div>
             <div style="display:flex; gap:6px;">
-              <a href="http://localhost:8765" target="_blank" class="intel-privacy-toggle" id="openCollabLink">Open Archive ↗</a>
+              <span class="intel-privacy-toggle" style="cursor:default;opacity:0.75;">Local Plugin</span>
             </div>
           </div>
           <div class="briefing-grid">
@@ -178,7 +178,7 @@
             <div class="briefing-col">
               <h3 class="briefing-subtitle">Work Handoffs</h3>
               <div id="collabHandoffsList" class="briefing-list">
-                <div style="color:var(--text-muted);font-size:13px;padding:8px;">All tasks reconciled with primary workspace.</div>
+                <div style="color:var(--text-muted);font-size:13px;padding:8px;">No pending handoffs. Collaboration journal idle.</div>
               </div>
             </div>
           </div>
@@ -372,6 +372,7 @@
               <button class="filter-chip" data-filter="bookmarks">Bookmarks</button>
               <button class="filter-chip" data-filter="history">History</button>
               <button class="filter-chip" data-filter="sessions">Saved Sessions</button>
+              <button class="filter-chip" data-filter="searches">Research</button>
             </div>
             <div class="suggested-destinations-list" id="suggestedDestinationsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
               <!-- Populated dynamically -->

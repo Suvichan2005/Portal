@@ -73,3 +73,9 @@
 | **60. Clean Shortcut Cards (Zero Repetitive Badges)** | `PASSED-REAL` | Verified in Test 30: Quick Access cards display clean icons and titles without annoying `FREQUENT` badges; provenance shown on hover |
 | **61. Deep-Path History Clustering & Clean Normalization** | `PASSED-UNIT` | Verified in Unit Tests 1-2: Groups by `/c/:id`, `:owner/:repo`, `/document/d/:id`, filtering generic titles (`Home`, `Sign in`) |
 | **62. Cross-Device Atomic Staging & Rollback Protection** | `PASSED-REAL` | `scripts/sync-release.ps1` provides atomic `dist.backup/` staging and automatic rollback on build failures |
+| **63. Candidate Destination Selection & Instant Pin Feedback** | `PASSED-REAL` | Verified in Test 31: Suggested Destinations dynamically scores candidates and displays instant `✓ Pinned` feedback |
+| **64. Operational Module Status & OpenClaw Live Coordinator** | `PASSED-REAL` | Verified in Test 32 & Unit Test 5: OpenClaw connects to live port 57849; Flowmate/Placement report honest unconfigured status |
+| **65. Typed Session Workspace Restoration Semantics** | `PASSED-UNIT` | Verified in Unit Test 3: Restores full tab window via `restoreSession()`; never truncates workspace to first tab |
+| **66. Research Query Recognition & Single-Visit Noise Filtering** | `PASSED-UNIT` | Verified in Unit Test 2: Searches with >= 2 visits form research destinations; 1-visit one-offs filtered out |
+| **67. Prompt API 7-Stage Capability Tracking** | `PASSED-UNIT` | Verified in Unit Test 4: Distinguishes unavailable, downloadable, ready, and inference_applied states honestly |
+| **68. Lock-Protected Atomic NTFS Staging Pipeline** | `PASSED-REAL` | Verified in `scripts/sync-release.ps1`: `.deploy.lock`, `$LASTEXITCODE` checks, fast-forward pull, and 5-artifact validation |

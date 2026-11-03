@@ -1,10 +1,10 @@
 {
   "name": "portal-extension",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Intelligent, beautiful, ultra-lightweight Chrome homepage and browser launcher",
   "type": "module",
   "scripts": {
-    "build": "tsx scripts/generate-metadata.ts && vite build && vite build --config vite.overlay.config.ts",
+    "build": "vite build && vite build --config vite.overlay.config.ts && tsx scripts/generate-metadata.ts",
     "metadata": "tsx scripts/generate-metadata.ts",
     "dev": "vite",
     "typecheck": "tsc --noEmit",

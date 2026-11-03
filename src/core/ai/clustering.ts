@@ -15,11 +15,7 @@ const SENSITIVE_DOMAINS = [
   '127.0.0.1',
 ];
 
-const SEARCH_ENGINES = [
-  'google.com/search',
-  'duckduckgo.com/?q=',
-  'bing.com/search',
-];
+const SEARCH_ENGINE_HOSTS = new Set(['google.com', 'www.google.com', 'duckduckgo.com', 'bing.com', 'www.bing.com']);
 
 const GENERIC_TITLES = new Set([
   'home',
@@ -36,13 +32,69 @@ const GENERIC_TITLES = new Set([
   'index',
   'account',
   'my account',
+  'new chat',
+  'chatgpt',
+  'untitled document',
+  'google docs',
+  'google sheets',
+  'sign in to your account',
+]);
+
+const TRACKING_PARAMS = new Set([
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'ref',
+  'source',
+  'fbclid',
+  'gclid',
+  'msclkid',
+  'ncid',
+  'usp',
 ]);
 
 export class HistoryClusterer {
   /**
-   * Filters out sensitive, authentication, and transient search result URLs.
+   * Normalizes URLs by removing tracking query parameters and trailing slashes.
    */
-  private isSafeUrl(urlStr: string): boolean {
+  public normalizeUrl(urlStr: string): string {
+    try {
+      const u = new URL(urlStr);
+      const searchParams = new URLSearchParams(u.search);
+      for (const param of Array.from(searchParams.keys())) {
+        if (TRACKING_PARAMS.has(param.toLowerCase())) {
+          searchParams.delete(param);
+        }
+      }
+      const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
+      return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '') || '/'}${searchStr}`;
+    } catch {
+      return urlStr;
+    }
+  }
+
+  /**
+   * Detects whether a URL is a search engine query and extracts query terms.
+   */
+  public extractSearchQuery(url: URL): string | null {
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (SEARCH_ENGINE_HOSTS.has(host) || host.endsWith('.google.com')) {
+      if (url.pathname.includes('/search') || url.pathname === '/' || host.includes('duckduckgo.com')) {
+        const q = url.searchParams.get('q');
+        if (q && q.trim().length >= 2) {
+          return q.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Filters out sensitive, authentication, and transient private URLs.
+   */
+  public isSafeUrl(urlStr: string): boolean {
     try {
       const u = new URL(urlStr);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
@@ -52,9 +104,6 @@ export class HistoryClusterer {
       for (const sens of SENSITIVE_DOMAINS) {
         if (host.includes(sens) || href.includes(sens)) return false;
       }
-      for (const se of SEARCH_ENGINES) {
-        if (href.includes(se)) return false;
-      }
       return true;
     } catch {
       return false;
@@ -63,9 +112,15 @@ export class HistoryClusterer {
 
   /**
    * Generates a deep-path aware grouping key to prevent collapsing distinct
-   * conversations, documents, and repositories into generic domain buckets.
+   * conversations, documents, repositories, or repeated research searches into generic buckets.
    */
   public getGroupKey(url: URL): string {
+    // Check if repeated search query
+    const searchQuery = this.extractSearchQuery(url);
+    if (searchQuery) {
+      return `search:${searchQuery.toLowerCase()}`;
+    }
+
     const host = url.hostname.replace(/^www\./, '').toLowerCase();
     const pathParts = url.pathname.split('/').filter(Boolean);
 
@@ -79,7 +134,7 @@ export class HistoryClusterer {
       return `github.com/${pathParts[0]}/${pathParts[1]}`;
     }
 
-    // 3. Google Docs & Sheets: docs.google.com/document/d/<id>
+    // 3. Google Docs, Sheets & Slides: docs.google.com/(document|spreadsheets|presentation)/d/<id>
     if (host === 'docs.google.com' && pathParts.length >= 3 && pathParts[1] === 'd') {
       return `docs.google.com/${pathParts[0]}/d/${pathParts[2]}`;
     }
@@ -101,32 +156,49 @@ export class HistoryClusterer {
   /**
    * Derives a clean cluster topic name from domain, deep path, and sample title.
    */
-  private extractTopicName(urlStr: string, sampleTitle: string): { topic: string; domain: string } {
+  public extractTopicName(urlStr: string, sampleTitle: string): { topic: string; domain: string } {
     try {
       const u = new URL(urlStr);
       const domain = u.hostname.replace(/^www\./, '');
       const pathParts = u.pathname.split('/').filter(Boolean);
 
-      // E.g. ChatGPT conversation title
+      // Repeated Research Query
+      const searchQuery = this.extractSearchQuery(u);
+      if (searchQuery) {
+        return { topic: `Research: "${searchQuery}"`, domain: 'Google / Web' };
+      }
+
+      // ChatGPT conversation title
       if ((domain === 'chatgpt.com' || domain === 'chat.openai.com') && pathParts[0] === 'c') {
         const cleanTitle = this.cleanPageTitle(sampleTitle);
-        if (cleanTitle && !cleanTitle.toLowerCase().includes('chatgpt')) {
-          return { topic: cleanTitle, domain };
+        if (cleanTitle && !cleanTitle.toLowerCase().includes('chatgpt') && !cleanTitle.toLowerCase().includes('new chat')) {
+          return { topic: cleanTitle, domain: 'chatgpt.com' };
         }
-        return { topic: 'ChatGPT Conversation', domain };
+        const idSnippet = pathParts[1] ? ` (${pathParts[1].substring(0, 6)})` : '';
+        return { topic: `ChatGPT Conversation${idSnippet}`, domain: 'chatgpt.com' };
       }
 
-      // E.g. github.com/user/repo -> "Repo (GitHub)"
+      // Google Docs, Sheets, Presentations
+      if (domain === 'docs.google.com' && pathParts.length >= 3 && pathParts[1] === 'd') {
+        const docType = pathParts[0] === 'spreadsheets' ? 'Sheet' : pathParts[0] === 'presentation' ? 'Slides' : 'Doc';
+        const cleanTitle = this.cleanPageTitle(sampleTitle);
+        if (cleanTitle && !cleanTitle.toLowerCase().startsWith('google doc') && !cleanTitle.toLowerCase().startsWith('untitled')) {
+          return { topic: `${cleanTitle} (${docType})`, domain: 'docs.google.com' };
+        }
+        const idSnippet = pathParts[2] ? ` (${pathParts[2].substring(0, 6)})` : '';
+        return { topic: `Google ${docType}${idSnippet}`, domain: 'docs.google.com' };
+      }
+
+      // GitHub: github.com/user/repo
       if (domain === 'github.com' && pathParts.length >= 2) {
-        return { topic: `${pathParts[0]}/${pathParts[1]}`, domain };
+        return { topic: `${pathParts[0]}/${pathParts[1]}`, domain: 'github.com' };
       }
 
-      // E.g. developer.chrome.com/docs/... -> "Chrome Docs"
+      // Documentation portals
       if (domain === 'developer.chrome.com') {
         return { topic: 'Chrome Docs', domain };
       }
 
-      // E.g. news.ycombinator.com -> "Hacker News"
       if (domain === 'news.ycombinator.com') {
         return { topic: 'Hacker News', domain };
       }
@@ -146,17 +218,27 @@ export class HistoryClusterer {
   /**
    * Strips generic words, site suffixes, and delimiter noise from page titles.
    */
-  private cleanPageTitle(rawTitle: string): string | null {
+  public cleanPageTitle(rawTitle: string): string | null {
     if (!rawTitle) return null;
-    const segments = rawTitle.split(/[-|•–—:]/).map((s) => s.trim()).filter(Boolean);
+    // Strip common site suffix tags like "- Google Docs", "| GitHub", "- YouTube"
+    const cleaned = rawTitle
+      .replace(/ - Google Docs$/i, '')
+      .replace(/ - Google Sheets$/i, '')
+      .replace(/ - Google Slides$/i, '')
+      .replace(/ - ChatGPT$/i, '')
+      .replace(/ \| GitHub$/i, '')
+      .replace(/ - YouTube$/i, '')
+      .trim();
+
+    const segments = cleaned.split(/[-|•–—:]/).map((s) => s.trim()).filter(Boolean);
     for (const segment of segments) {
       const lower = segment.toLowerCase();
-      if (!GENERIC_TITLES.has(lower) && segment.length >= 3 && segment.length <= 40) {
+      if (!GENERIC_TITLES.has(lower) && segment.length >= 3 && segment.length <= 50) {
         return segment;
       }
     }
-    const fallback = rawTitle.trim();
-    if (fallback.length >= 3 && fallback.length <= 40 && !GENERIC_TITLES.has(fallback.toLowerCase())) {
+    const fallback = cleaned.trim();
+    if (fallback.length >= 3 && fallback.length <= 50 && !GENERIC_TITLES.has(fallback.toLowerCase())) {
       return fallback;
     }
     return null;
@@ -175,6 +257,7 @@ export class HistoryClusterer {
         lastVisitTime: number;
         recentTitles: string[];
         subUrls: string[];
+        isSearchQuery?: boolean;
       }
     >();
 
@@ -183,9 +266,16 @@ export class HistoryClusterer {
       if (await storage.isDismissed(item.url)) continue;
 
       try {
-        const u = new URL(item.url);
-        const groupKey = this.getGroupKey(u);
+        const normalized = this.normalizeUrl(item.url);
+        const u = new URL(normalized);
+        const searchQuery = this.extractSearchQuery(u);
 
+        // One-off transient search queries are excluded; repeated searches (>= 2 visits) are kept
+        if (searchQuery && (item.visitCount || 1) < 2) {
+          continue;
+        }
+
+        const groupKey = this.getGroupKey(u);
         if (await storage.isDismissed(groupKey)) continue;
 
         const existing = groupMap.get(groupKey);
@@ -195,25 +285,26 @@ export class HistoryClusterer {
 
         if (!existing) {
           groupMap.set(groupKey, {
-            primaryUrl: item.url,
+            primaryUrl: normalized,
             title,
             visits: count,
             lastVisitTime: time,
             recentTitles: [title],
-            subUrls: [item.url],
+            subUrls: [normalized],
+            isSearchQuery: !!searchQuery,
           });
         } else {
           existing.visits += count;
           if (time > existing.lastVisitTime) {
             existing.lastVisitTime = time;
-            existing.primaryUrl = item.url;
+            existing.primaryUrl = normalized;
             existing.title = title;
           }
           if (title && !existing.recentTitles.includes(title)) {
             existing.recentTitles.push(title);
           }
-          if (!existing.subUrls.includes(item.url)) {
-            existing.subUrls.push(item.url);
+          if (!existing.subUrls.includes(normalized)) {
+            existing.subUrls.push(normalized);
           }
         }
       } catch {
@@ -245,7 +336,9 @@ export class HistoryClusterer {
         visits: group.visits,
         score,
         recentTitles: group.recentTitles.slice(0, 5),
-        aiGeneratedReason: `Frequently visited (${group.visits} times, active recently)`,
+        aiGeneratedReason: group.isSearchQuery
+          ? `Frequent research query (${group.visits} searches)`
+          : `Frequently visited (${group.visits} times, active recently)`,
       });
     }
 

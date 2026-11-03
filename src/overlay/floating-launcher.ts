@@ -1,7 +1,7 @@
 import { SearchResult, InitialLauncherState } from '../core/types';
 import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 import { resolveSynchronousIntent } from '../core/search/grammar';
-import { cleanPastedInput } from '../core/search/url-utils';
+import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
 
 (function initPortalFloatingLauncher() {
   const ROOT_ID = 'portal-floating-launcher-root';
@@ -608,12 +608,17 @@ import { cleanPastedInput } from '../core/search/url-utils';
 
     // If query is empty, show MRU open tabs from initial state!
     if (!trimmed) {
+      ++searchSeq;
       if (initialState?.openTabs && initialState.openTabs.length > 0) {
         currentResults = initialState.openTabs;
         selectedIndex = 0;
         renderResults();
         return;
       }
+      currentResults = [];
+      selectedIndex = -1;
+      renderResults();
+      return;
     }
 
     const currentSeq = ++searchSeq;
@@ -738,6 +743,29 @@ import { cleanPastedInput } from '../core/search/url-utils';
     // Enter execution: Primary interaction
     if (e.key === 'Enter') {
       e.preventDefault();
+      clearTimeout(debounceTimer);
+      const val = cleanPastedInput(input.value);
+
+      // Priority 1: Unambiguous direct URL navigation when user hasn't explicitly navigated down to a suggestion
+      const directMatch = parseDirectUrl(val);
+      if (directMatch.isUrl && selectedIndex <= 0) {
+        chrome.runtime.sendMessage(
+          {
+            type: 'PORTAL_EXECUTE_ACTION',
+            item: {
+              id: `direct-url-${Date.now()}`,
+              type: 'web',
+              title: directMatch.displayTitle,
+              url: directMatch.normalizedUrl,
+              score: 9999,
+            },
+            context: 'overlay',
+            modifiers: { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, alt: e.altKey },
+          },
+          () => closeOverlay(),
+        );
+        return;
+      }
 
       // Case A: A suggestion is already rendered and selected
       if (currentResults.length > 0 && selectedIndex >= 0 && currentResults[selectedIndex]) {
@@ -747,7 +775,6 @@ import { cleanPastedInput } from '../core/search/url-utils';
 
       // Case B: Suggestions haven't arrived yet, or results are empty
       // Execute synchronous intent immediately from current input text!
-      const val = input.value.trim();
       if (!val) {
         // If completely empty, switch to previous tab if known
         if (initialState?.openTabs && initialState.openTabs[0]) {

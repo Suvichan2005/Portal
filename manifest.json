@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Portal",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Intelligent, beautiful, ultra-lightweight Chrome homepage and browser launcher",
   "chrome_url_overrides": {
     "newtab": "src/newtab/index.html"

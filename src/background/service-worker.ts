@@ -10,14 +10,23 @@ console.log('[Portal Service Worker] Initializing v1.5.0...');
 
 // Track Most Recently Used (MRU) tabs across activations, persisted across service worker suspension
 let mruTabHistory: number[] = [];
+let mruInitPromise: Promise<number[]> | null = null;
 
-// Restore MRU history from chrome.storage.session if available
-if (chrome.storage?.session) {
-  chrome.storage.session.get(['mruTabHistory']).then((res) => {
-    if (Array.isArray(res?.mruTabHistory)) {
-      mruTabHistory = res.mruTabHistory;
-    }
-  }).catch(() => {});
+async function getMruHistory(): Promise<number[]> {
+  if (!mruInitPromise) {
+    mruInitPromise = (async () => {
+      if (chrome.storage?.session) {
+        try {
+          const res = await chrome.storage.session.get(['mruTabHistory']);
+          if (Array.isArray(res?.mruTabHistory)) {
+            mruTabHistory = res.mruTabHistory;
+          }
+        } catch {}
+      }
+      return mruTabHistory;
+    })();
+  }
+  return mruInitPromise;
 }
 
 async function persistMru(): Promise<void> {
@@ -30,6 +39,7 @@ async function persistMru(): Promise<void> {
 
 if (chrome.tabs?.onActivated) {
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    await getMruHistory();
     mruTabHistory = [activeInfo.tabId, ...mruTabHistory.filter((id) => id !== activeInfo.tabId)].slice(0, 50);
     await persistMru();
   });
@@ -37,6 +47,7 @@ if (chrome.tabs?.onActivated) {
 
 if (chrome.tabs?.onRemoved) {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
+    await getMruHistory();
     mruTabHistory = mruTabHistory.filter((id) => id !== tabId);
     await persistMru();
   });
@@ -229,14 +240,15 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
       const recentClusters = intel?.clusters || [];
       const tabs = await chrome.tabs.query({});
 
+      const history = await getMruHistory();
       // Sort tabs by MRU order:
       // Priority 1: Position in mruTabHistory
       // Priority 2: tab.lastAccessed timestamp
       const sortedTabs = tabs
         .filter((t) => t.url && !t.url.startsWith('chrome://newtab') && (!currentTabId || t.id !== currentTabId))
         .sort((a, b) => {
-          const aMruIdx = a.id ? mruTabHistory.indexOf(a.id) : -1;
-          const bMruIdx = b.id ? mruTabHistory.indexOf(b.id) : -1;
+          const aMruIdx = a.id ? history.indexOf(a.id) : -1;
+          const bMruIdx = b.id ? history.indexOf(b.id) : -1;
           if (aMruIdx !== -1 && bMruIdx !== -1) return aMruIdx - bMruIdx;
           if (aMruIdx !== -1) return -1;
           if (bMruIdx !== -1) return 1;
@@ -379,20 +391,24 @@ async function executePortalAction(
   sender: chrome.runtime.MessageSender,
   modifiers?: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean },
 ): Promise<{ success: boolean; message?: string }> {
-  // 1. Command execution
-  if (item.type === 'command' && item.commandId) {
-    if (item.commandId === 'restore-saved-session' && item.sessionId) {
-      const session = await storage.getSessionById(item.sessionId);
-      if (session && session.tabs.length > 0) {
-        const validUrls = session.tabs
-          .map((t) => t.url)
-          .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
-        if (validUrls.length > 0) {
-          await chrome.windows.create({ url: validUrls });
-          return { success: true, message: `Restored session "${session.name}" (${validUrls.length} tabs)` };
-        }
+  // 1. Session / Workspace restoration
+  if (item.type === 'session' || (item.commandId === 'restore-saved-session' && item.sessionId)) {
+    const sId = item.sessionId || (item.id ? item.id.replace(/^session-/, '') : '');
+    const session = await storage.getSessionById(sId);
+    if (session && session.tabs.length > 0) {
+      const validUrls = session.tabs
+        .map((t) => t.url)
+        .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
+      if (validUrls.length > 0) {
+        await chrome.windows.create({ url: validUrls });
+        return { success: true, message: `Restored workspace "${session.name}" (${validUrls.length} tabs)` };
       }
     }
+    return { success: false, message: 'Workspace session not found or contains no tabs' };
+  }
+
+  // 2. Command execution
+  if (item.type === 'command' && item.commandId) {
     const cmd = COMMANDS.find((c) => c.id === item.commandId);
     if (cmd) {
       const res = await cmd.execute({
@@ -405,7 +421,7 @@ async function executePortalAction(
     return { success: false, message: `Command ${item.commandId} not found` };
   }
 
-  // 2. Tab switching
+  // 3. Tab switching
   if (item.type === 'tab' && item.tabId) {
     if (item.windowId) {
       await chrome.windows.update(item.windowId, { focused: true });
@@ -414,19 +430,24 @@ async function executePortalAction(
     return { success: true, message: `Switched to ${item.title}` };
   }
 
-  // 3. URL Navigation / Web Search
+  // 4. URL Navigation / Web Search
   if (item.url) {
-    // If the URL is already open in an existing tab, prefer switching to it!
-    const tabs = await chrome.tabs.query({});
-    const cleanTarget = item.url.toLowerCase().split('#')[0].replace(/\/$/, '');
-    const existing = tabs.find(
-      (t) => t.url && t.url.toLowerCase().split('#')[0].replace(/\/$/, '') === cleanTarget,
-    );
+    // If user explicitly pressed Ctrl or Meta (background tab requested), DO NOT switch to existing tab
+    const isBackgroundRequested = !!(modifiers?.ctrl || modifiers?.meta);
 
-    if (existing && existing.id && existing.windowId) {
-      await chrome.windows.update(existing.windowId, { focused: true });
-      await chrome.tabs.update(existing.id, { active: true });
-      return { success: true, message: `Switched to existing tab: ${item.title}` };
+    if (!isBackgroundRequested) {
+      // If the URL is already open in an existing tab, prefer switching to it!
+      const tabs = await chrome.tabs.query({});
+      const cleanTarget = item.url.toLowerCase().split('#')[0].replace(/\/$/, '');
+      const existing = tabs.find(
+        (t) => t.url && t.url.toLowerCase().split('#')[0].replace(/\/$/, '') === cleanTarget,
+      );
+
+      if (existing && existing.id && existing.windowId) {
+        await chrome.windows.update(existing.windowId, { focused: true });
+        await chrome.tabs.update(existing.id, { active: true });
+        return { success: true, message: `Switched to existing tab: ${item.title}` };
+      }
     }
 
     // Destination handling:

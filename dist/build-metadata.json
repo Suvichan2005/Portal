@@ -1,9 +1,16 @@
 {
-  "version": "1.5.0",
-  "commit": "77db8de59d01bfcb9e025c1a0ca59135e0d8aa8e",
+  "version": "1.5.1",
+  "commit": "add3c44e70f18e31f975984be75727c9ec38fb33",
   "branch": "feature/portal-next-level",
-  "buildTime": "2026-11-02T20:32:37.544Z",
+  "buildTime": "2026-11-03T07:21:58.108Z",
   "buildHost": "ideapad",
   "targetWorkstation": "thinkbook",
-  "status": "verified"
+  "status": "verified",
+  "targetDir": "dist",
+  "checksums": {
+    "manifest.json": "a64e540db011a3f3",
+    "index.html": "b84e309e7e0c9047",
+    "overlay.js": "03064b89e408fd65",
+    "service-worker.js": "b118fed31a385921"
+  }
 }

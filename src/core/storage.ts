@@ -118,12 +118,22 @@ class StorageService {
 
   async pinShortcut(shortcut: Omit<PinnedShortcut, 'id' | 'addedAt'>): Promise<PinnedShortcut[]> {
     const current = await this.getPinnedShortcuts();
-    const existingIndex = current.findIndex((p) => p.url === shortcut.url);
+    const existingIndex = current.findIndex((p) => {
+      if (shortcut.type === 'session' && shortcut.sessionId) {
+        return p.sessionId === shortcut.sessionId;
+      }
+      return p.url === shortcut.url;
+    });
     const item: PinnedShortcut = {
       id: `pin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: shortcut.title,
       url: shortcut.url,
       customTitle: shortcut.customTitle,
+      type: shortcut.type || 'url',
+      sessionId: shortcut.sessionId,
+      searchQuery: shortcut.searchQuery,
+      tabCount: shortcut.tabCount,
+      actionId: shortcut.actionId,
       addedAt: Date.now(),
     };
 
@@ -466,6 +476,25 @@ class StorageService {
       this.setRaw(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
     }
     return true;
+  }
+
+  async restoreSession(id: string): Promise<{ success: boolean; tabCount: number; message: string }> {
+    const session = await this.getSessionById(id);
+    if (!session || session.tabs.length === 0) {
+      return { success: false, tabCount: 0, message: 'Workspace session not found or contains no tabs.' };
+    }
+    const validUrls = session.tabs
+      .map((t) => t.url)
+      .filter((url) => url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('chrome-extension://')));
+    if (validUrls.length === 0) {
+      return { success: false, tabCount: 0, message: 'No valid URLs found in session.' };
+    }
+    if (typeof chrome !== 'undefined' && chrome.windows?.create) {
+      await chrome.windows.create({ url: validUrls });
+    } else if (typeof window !== 'undefined') {
+      validUrls.forEach((u) => window.open(u, '_blank'));
+    }
+    return { success: true, tabCount: validUrls.length, message: `Restored workspace "${session.name}" (${validUrls.length} tabs)` };
   }
 }
 

@@ -75,7 +75,7 @@ test.describe('Portal v1.5.0 Modular Command Shell & Discovery Tests', () => {
     const collab = modules.find((m) => m.id === 'agentic_collab');
     expect(collab).toBeDefined();
     expect(collab?.name).toBe('AgenticCollab');
-    expect(collab?.primaryDeepLink).toContain('8765');
+    expect(collab?.statusText).toContain('codex-chatgpt-collab');
 
     const openclaw = modules.find((m) => m.id === 'openclaw');
     expect(openclaw).toBeDefined();

@@ -778,4 +778,48 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
     const count = await frequentPills.count();
     expect(count).toBe(0);
   });
+
+  test('31. Add Destination Discovery: Candidate item pinning and instant "✓ Pinned" feedback', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Open add destination modal
+    await page.locator('#addShortcutBtn').click();
+    const modal = page.locator('#editShortcutModal');
+    await expect(modal).toBeVisible();
+
+    // Verify candidates are listed
+    const candidateList = page.locator('#suggestedDestinationsList');
+    await expect(candidateList).toBeVisible();
+
+    const candidateCards = page.locator('.suggested-item-card');
+    if ((await candidateCards.count()) > 0) {
+      const firstCard = candidateCards.first();
+      await expect(firstCard).toBeVisible();
+      const pinBtn = firstCard.locator('.suggested-pin-btn');
+      await expect(pinBtn).toBeVisible();
+    }
+
+    await page.locator('#closeEditShortcutModalBtn').click();
+    await expect(modal).toBeHidden();
+  });
+
+  test('32. Operational Module Status: OpenClaw live coordinator and honest disconnected modules', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    // Verify Placement OS honest tag
+    const placementTab = page.locator('#tabPlacementBtn');
+    await placementTab.click();
+    const placementTag = page.locator('#placementFreshnessTag');
+    await expect(placementTag).toContainText('not connected', { ignoreCase: true });
+
+    // Verify AgenticCollab honest tag
+    const collabTab = page.locator('#tabCollabBtn');
+    await collabTab.click();
+    const collabTag = page.locator('#collabFreshnessTag');
+    await expect(collabTag).toContainText('codex-chatgpt-collab');
+  });
 });

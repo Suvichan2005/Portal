@@ -5,6 +5,7 @@ import { promptApi } from '../core/ai/prompt-api';
 import {
   SearchResult,
   PinnedShortcut,
+  DestinationCandidate,
   HistoryCluster,
   UserPreferences,
   PersonalBriefing,
@@ -15,9 +16,11 @@ import { Icons, getFaviconUrl } from '../core/icons/svg-icons';
 import { COMMANDS } from '../core/commands/registry';
 import { briefingService } from '../core/intelligence/briefing-service';
 import { openClawBridge } from '../core/bridge/openclaw-bridge';
+import { moduleRegistry, ModuleDescriptor } from '../core/modules/module-registry';
+import { historyClusterer } from '../core/ai/clustering';
 import { runStorageMigration } from '../core/migration';
 import { resolveSynchronousIntent } from '../core/search/grammar';
-import { cleanPastedInput } from '../core/search/url-utils';
+import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
 
 class PortalNewTabController {
   private prefs: UserPreferences = {
@@ -88,7 +91,7 @@ class PortalNewTabController {
   private searchSeq = 0;
 
   // Candidate Destinations for Add Shortcut Modal
-  private candidateDestinations: { title: string; url: string; source: 'tab' | 'bookmark' | 'history' | 'session' }[] = [];
+  private candidateDestinations: DestinationCandidate[] = [];
   private currentAddFilter: string = 'all';
   private importBriefingBtn: HTMLElement | null = null;
   private importBriefingModal: HTMLElement | null = null;
@@ -98,7 +101,6 @@ class PortalNewTabController {
 
   async init() {
     await runStorageMigration().catch(() => {});
-    this.bindDomElements();
     this.bindDomElements();
     this.setupIcons();
     this.setupClock();
@@ -329,6 +331,15 @@ class PortalNewTabController {
         !e.metaKey &&
         !e.altKey
       ) {
+        e.preventDefault();
+        this.searchInput?.focus();
+        this.searchInput?.select();
+      }
+    });
+
+    // Alt+Q focuses search input directly in New Tab
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 'q' || e.key === 'Q')) {
         e.preventDefault();
         this.searchInput?.focus();
         this.searchInput?.select();
@@ -773,6 +784,9 @@ class PortalNewTabController {
   private async handleSearchInput() {
     const query = this.searchInput.value.trim();
     if (!query) {
+      ++this.searchSeq;
+      clearTimeout(this.debounceTimer);
+      this.currentSuggestions = [];
       this.hideSuggestions();
       return;
     }
@@ -911,15 +925,31 @@ class PortalNewTabController {
 
     if (e.key === 'Enter') {
       e.preventDefault();
+      clearTimeout(this.debounceTimer);
+      const raw = cleanPastedInput(this.searchInput.value);
+      if (!raw) return;
+
+      // Priority 1: Unambiguous direct URL navigation when user hasn't explicitly navigated down to a suggestion
+      const directMatch = parseDirectUrl(raw);
+      if (directMatch.isUrl && this.selectedSuggestionIndex <= 0) {
+        if (e.ctrlKey || e.metaKey) {
+          if (typeof chrome !== 'undefined' && chrome.tabs) {
+            chrome.tabs.create({ url: directMatch.normalizedUrl, active: false });
+          } else {
+            window.open(directMatch.normalizedUrl, '_blank');
+          }
+        } else {
+          window.location.href = directMatch.normalizedUrl;
+        }
+        return;
+      }
+
       if (this.selectedSuggestionIndex >= 0 && this.currentSuggestions[this.selectedSuggestionIndex]) {
         this.executeSuggestion(this.currentSuggestions[this.selectedSuggestionIndex], e);
         return;
       }
 
       // Enter pressed before suggestions loaded or suggestions empty: resolve synchronous intent
-      const raw = this.searchInput.value.trim();
-      if (!raw) return;
-
       const intent = resolveSynchronousIntent(raw, this.prefs.searchEngine);
       if (
         (intent.type === 'navigate_url' ||
@@ -975,6 +1005,15 @@ class PortalNewTabController {
       } else {
         this.showToast('Clipboard API unavailable in this browser context');
       }
+      return;
+    }
+
+    // Workspace Session restoration
+    if (item.type === 'session' || (item.commandId === 'restore-saved-session' && item.sessionId)) {
+      const sId = item.sessionId || (item.id ? item.id.replace(/^session-/, '') : '');
+      const res = await storage.restoreSession(sId);
+      this.showToast(res.message);
+      this.hideSuggestions();
       return;
     }
 
@@ -1034,6 +1073,10 @@ class PortalNewTabController {
       title: string;
       url: string;
       isPinned: boolean;
+      type?: 'url' | 'session' | 'search' | 'action';
+      sessionId?: string;
+      tabCount?: number;
+      searchQuery?: string;
       isAiSuggested?: boolean;
       cluster?: HistoryCluster;
     }[] = [];
@@ -1044,11 +1087,16 @@ class PortalNewTabController {
         title: p.customTitle || p.title,
         url: p.url,
         isPinned: true,
+        type: p.type || 'url',
+        sessionId: p.sessionId,
+        tabCount: p.tabCount,
+        searchQuery: p.searchQuery,
       });
     });
 
     // Add clusters that are not already pinned
     clusters.forEach((c) => {
+      const isSearch = c.topic.startsWith('Research:');
       if (!pinned.some((p) => p.url === c.primaryUrl)) {
         itemsToRender.push({
           id: c.id,
@@ -1056,6 +1104,7 @@ class PortalNewTabController {
           url: c.primaryUrl,
           isPinned: false,
           isAiSuggested: true,
+          type: isSearch ? 'search' : 'url',
           cluster: c,
         });
       }
@@ -1073,7 +1122,7 @@ class PortalNewTabController {
 
     itemsToRender.slice(0, 16).forEach((item) => {
       const card = document.createElement('div');
-      card.className = 'shortcut-card';
+      card.className = `shortcut-card ${item.type === 'session' ? 'session-card' : ''}`;
       card.tabIndex = 0;
 
       if (item.isAiSuggested && item.cluster?.isAiGenerated) {
@@ -1083,7 +1132,9 @@ class PortalNewTabController {
         aiPill.title = item.cluster.aiGeneratedReason || 'Generated by on-device model';
         card.appendChild(aiPill);
       }
-      card.title = item.cluster ? `${item.title} (${item.cluster.domain})` : item.title;
+      card.title = item.type === 'session'
+        ? `Workspace: ${item.title} (${item.tabCount || 0} tabs)`
+        : item.cluster ? `${item.title} (${item.cluster.domain})` : item.title;
 
       // Actions (Pin / Edit / Dismiss)
       const actions = document.createElement('div');
@@ -1114,6 +1165,10 @@ class PortalNewTabController {
           await storage.pinShortcut({
             title: item.title,
             url: item.url,
+            type: item.type,
+            sessionId: item.sessionId,
+            tabCount: item.tabCount,
+            searchQuery: item.searchQuery,
           });
           this.showToast(`Pinned ${item.title} to Quick Access`);
         }
@@ -1142,16 +1197,22 @@ class PortalNewTabController {
       // Icon
       const iconSlot = document.createElement('div');
       iconSlot.className = 'shortcut-icon';
-      const favUrl = getFaviconUrl(item.url);
-      if (favUrl) {
-        const img = document.createElement('img');
-        img.src = favUrl;
-        img.onerror = () => {
-          iconSlot.innerHTML = Icons.globe;
-        };
-        iconSlot.appendChild(img);
+      if (item.type === 'session') {
+        iconSlot.innerHTML = Icons.folder;
+      } else if (item.type === 'search') {
+        iconSlot.innerHTML = Icons.search;
       } else {
-        iconSlot.innerHTML = Icons.globe;
+        const favUrl = getFaviconUrl(item.url);
+        if (favUrl) {
+          const img = document.createElement('img');
+          img.src = favUrl;
+          img.onerror = () => {
+            iconSlot.innerHTML = Icons.globe;
+          };
+          iconSlot.appendChild(img);
+        } else {
+          iconSlot.innerHTML = Icons.globe;
+        }
       }
       card.appendChild(iconSlot);
 
@@ -1163,16 +1224,45 @@ class PortalNewTabController {
 
       const domain = document.createElement('div');
       domain.className = 'shortcut-domain';
-      try {
-        domain.textContent = new URL(item.url).hostname.replace(/^www\./, '');
-      } catch {
-        domain.textContent = item.url;
+      if (item.type === 'session') {
+        domain.textContent = `Workspace • ${item.tabCount || 0} tabs`;
+      } else if (item.type === 'search') {
+        domain.textContent = 'Search Query';
+      } else {
+        try {
+          domain.textContent = new URL(item.url).hostname.replace(/^www\./, '');
+        } catch {
+          domain.textContent = item.url;
+        }
       }
       card.appendChild(domain);
 
-      // Click to navigate
-      card.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.metaKey) {
+      // Destination Execution (Workspace restore, search, or direct navigation)
+      const executeDestination = async (e: MouseEvent | KeyboardEvent) => {
+        if (item.type === 'session' && item.sessionId) {
+          e.stopPropagation();
+          const res = await storage.restoreSession(item.sessionId);
+          this.showToast(res.message);
+          return;
+        }
+
+        if (item.type === 'search') {
+          const targetUrl = item.url || resolveSynchronousIntent(item.title, this.prefs.searchEngine).targetUrl;
+          if (targetUrl) {
+            if (e.ctrlKey || (e as any).metaKey) {
+              if (typeof chrome !== 'undefined' && chrome.tabs) {
+                chrome.tabs.create({ url: targetUrl, active: false });
+              } else {
+                window.open(targetUrl, '_blank');
+              }
+            } else {
+              window.location.href = targetUrl;
+            }
+          }
+          return;
+        }
+
+        if (e.ctrlKey || (e as any).metaKey) {
           if (typeof chrome !== 'undefined' && chrome.tabs) {
             chrome.tabs.create({ url: item.url, active: false });
           } else {
@@ -1181,10 +1271,12 @@ class PortalNewTabController {
         } else {
           window.location.href = item.url;
         }
-      });
+      };
+
+      card.addEventListener('click', executeDestination);
       card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          window.location.href = item.url;
+          executeDestination(e);
         }
       });
 
@@ -1194,52 +1286,90 @@ class PortalNewTabController {
 
   private async loadCandidateDestinations() {
     this.candidateDestinations = [];
-    const seenUrls = new Set<string>();
+    const seenKeys = new Set<string>();
 
-    // 1. Open tabs
+    const pinnedShortcuts = await storage.getPinnedShortcuts();
+    const pinnedUrls = new Set(pinnedShortcuts.map((p) => p.url));
+    const pinnedSessionIds = new Set(pinnedShortcuts.filter((p) => p.sessionId).map((p) => p.sessionId!));
+
+    // 1. Saved Sessions (First-class Workspaces)
+    try {
+      const sessions = await storage.getSavedSessions();
+      for (const s of sessions) {
+        if (s.tabs.length > 0 && !seenKeys.has(`session:${s.id}`)) {
+          seenKeys.add(`session:${s.id}`);
+          const isPinned = pinnedSessionIds.has(s.id);
+          this.candidateDestinations.push({
+            id: `candidate-session-${s.id}`,
+            title: s.name,
+            url: s.tabs[0]?.url || `portal://session/${s.id}`,
+            source: 'session',
+            type: 'session',
+            sessionId: s.id,
+            tabCount: s.tabCount,
+            score: 200 + Math.min(20, s.tabCount),
+            domain: `Workspace • ${s.tabCount} tabs`,
+            subtitle: `Saved workspace containing ${s.tabCount} tabs`,
+            isPinned,
+            badge: 'WORKSPACE',
+          });
+        }
+      }
+    } catch {}
+
+    // 2. Open Tabs
     if (typeof chrome !== 'undefined' && chrome.tabs) {
       try {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) {
           if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) continue;
-          if (!seenUrls.has(tab.url)) {
-            seenUrls.add(tab.url);
+          const normUrl = historyClusterer.normalizeUrl(tab.url);
+          if (!seenKeys.has(normUrl)) {
+            seenKeys.add(normUrl);
+            const isPinned = pinnedUrls.has(tab.url) || pinnedUrls.has(normUrl);
+            const cleanTitle = historyClusterer.cleanPageTitle(tab.title || '') || tab.title || tab.url;
+            let host = '';
+            try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch {}
             this.candidateDestinations.push({
-              title: tab.title || tab.url,
+              id: `candidate-tab-${tab.id}`,
+              title: cleanTitle,
               url: tab.url,
               source: 'tab',
+              type: 'url',
+              score: tab.active ? 160 : 120,
+              domain: host,
+              subtitle: `Active tab • ${host}`,
+              isPinned,
+              badge: 'TAB',
             });
           }
         }
       } catch {}
     }
 
-    // 2. Saved Sessions
-    try {
-      const sessions = await storage.getSavedSessions();
-      for (const s of sessions) {
-        if (s.tabs.length > 0 && !seenUrls.has(s.tabs[0].url)) {
-          seenUrls.add(s.tabs[0].url);
-          this.candidateDestinations.push({
-            title: `Workspace: ${s.name} (${s.tabCount} tabs)`,
-            url: s.tabs[0].url,
-            source: 'session',
-          });
-        }
-      }
-    } catch {}
-
-    // 3. Frequent history & intelligent clusters
+    // 3. Frequent history & intelligent clusters (including repeated research queries)
     try {
       const intel = await storage.getIntelligence();
       if (intel?.clusters) {
         for (const c of intel.clusters) {
-          if (!seenUrls.has(c.primaryUrl)) {
-            seenUrls.add(c.primaryUrl);
+          const isSearch = c.topic.startsWith('Research:');
+          const normUrl = historyClusterer.normalizeUrl(c.primaryUrl);
+          if (!seenKeys.has(normUrl) && !seenKeys.has(c.topic)) {
+            seenKeys.add(normUrl);
+            seenKeys.add(c.topic);
+            const isPinned = pinnedUrls.has(c.primaryUrl) || pinnedUrls.has(normUrl);
             this.candidateDestinations.push({
-              title: c.topic || c.title,
+              id: `candidate-history-${c.id}`,
+              title: c.topic,
               url: c.primaryUrl,
-              source: 'history',
+              source: isSearch ? 'search' : 'history',
+              type: isSearch ? 'search' : 'url',
+              searchQuery: isSearch ? c.topic.replace(/^Research:\s*"?/, '').replace(/"?$/, '') : undefined,
+              score: c.score || 100,
+              domain: c.domain,
+              subtitle: isSearch ? `Frequent search query (${c.visits} visits)` : `Frequently visited (${c.visits} visits) • ${c.domain}`,
+              isPinned,
+              badge: isSearch ? 'SEARCH' : 'FREQUENT',
             });
           }
         }
@@ -1250,21 +1380,36 @@ class PortalNewTabController {
     if (typeof chrome !== 'undefined' && chrome.bookmarks) {
       try {
         const bookmarks = await new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
-          chrome.bookmarks.getRecent(15, resolve);
+          chrome.bookmarks.getRecent(20, resolve);
         });
         for (const b of bookmarks) {
-          if (!b.url) continue;
-          if (!seenUrls.has(b.url)) {
-            seenUrls.add(b.url);
+          if (!b.url || b.url.startsWith('chrome://')) continue;
+          const normUrl = historyClusterer.normalizeUrl(b.url);
+          if (!seenKeys.has(normUrl)) {
+            seenKeys.add(normUrl);
+            const isPinned = pinnedUrls.has(b.url) || pinnedUrls.has(normUrl);
+            const cleanTitle = historyClusterer.cleanPageTitle(b.title || '') || b.title || b.url;
+            let host = '';
+            try { host = new URL(b.url).hostname.replace(/^www\./, ''); } catch {}
             this.candidateDestinations.push({
-              title: b.title || b.url,
+              id: `candidate-bm-${b.id}`,
+              title: cleanTitle,
               url: b.url,
               source: 'bookmark',
+              type: 'url',
+              score: 90,
+              domain: host,
+              subtitle: `Bookmark • ${host}`,
+              isPinned,
+              badge: 'BOOKMARK',
             });
           }
         }
       } catch {}
     }
+
+    // Sort candidates by score descending
+    this.candidateDestinations.sort((a, b) => b.score - a.score);
   }
 
   private renderCandidateDestinations(filterText = '') {
@@ -1274,9 +1419,20 @@ class PortalNewTabController {
 
     const lowerQ = filterText.toLowerCase();
     const filtered = this.candidateDestinations.filter((item) => {
-      if (this.currentAddFilter !== 'all' && item.source !== this.currentAddFilter) return false;
+      if (this.currentAddFilter !== 'all') {
+        if (this.currentAddFilter === 'tabs' && item.source !== 'tab') return false;
+        if (this.currentAddFilter === 'bookmarks' && item.source !== 'bookmark') return false;
+        if (this.currentAddFilter === 'history' && item.source !== 'history') return false;
+        if (this.currentAddFilter === 'sessions' && item.source !== 'session') return false;
+        if (this.currentAddFilter === 'searches' && item.source !== 'search') return false;
+      }
       if (!lowerQ) return true;
-      return item.title.toLowerCase().includes(lowerQ) || item.url.toLowerCase().includes(lowerQ);
+      return (
+        item.title.toLowerCase().includes(lowerQ) ||
+        item.url.toLowerCase().includes(lowerQ) ||
+        item.subtitle.toLowerCase().includes(lowerQ) ||
+        item.domain.toLowerCase().includes(lowerQ)
+      );
     });
 
     if (filtered.length === 0) {
@@ -1285,19 +1441,29 @@ class PortalNewTabController {
       return;
     }
 
-    for (const item of filtered.slice(0, 20)) {
+    for (const item of filtered.slice(0, 25)) {
       const card = document.createElement('div');
-      card.className = 'suggested-item-card';
+      card.className = `suggested-item-card ${item.isPinned ? 'already-pinned' : ''}`;
 
       const info = document.createElement('div');
       info.className = 'suggested-item-info';
 
-      const icon = document.createElement('img');
-      icon.className = 'suggested-item-icon';
-      icon.src = getFaviconUrl(item.url);
-      icon.onerror = () => {
-        icon.style.display = 'none';
-      };
+      // Icon: Workspace icon for session, search icon for search, favicon for URL
+      const iconSlot = document.createElement('div');
+      iconSlot.className = 'suggested-item-icon-slot';
+      if (item.type === 'session') {
+        iconSlot.innerHTML = Icons.folder;
+      } else if (item.type === 'search') {
+        iconSlot.innerHTML = Icons.search;
+      } else {
+        const icon = document.createElement('img');
+        icon.className = 'suggested-item-icon';
+        icon.src = getFaviconUrl(item.url);
+        icon.onerror = () => {
+          iconSlot.innerHTML = Icons.globe;
+        };
+        iconSlot.appendChild(icon);
+      }
 
       const text = document.createElement('div');
       text.className = 'suggested-item-text';
@@ -1306,17 +1472,13 @@ class PortalNewTabController {
       title.className = 'suggested-item-title';
       title.textContent = item.title;
 
-      const urlSpan = document.createElement('div');
-      urlSpan.className = 'suggested-item-url';
-      try {
-        urlSpan.textContent = new URL(item.url).hostname;
-      } catch {
-        urlSpan.textContent = item.url;
-      }
+      const sub = document.createElement('div');
+      sub.className = 'suggested-item-url';
+      sub.textContent = item.subtitle;
 
       text.appendChild(title);
-      text.appendChild(urlSpan);
-      info.appendChild(icon);
+      text.appendChild(sub);
+      info.appendChild(iconSlot);
       info.appendChild(text);
 
       const right = document.createElement('div');
@@ -1326,27 +1488,38 @@ class PortalNewTabController {
 
       const badge = document.createElement('span');
       badge.className = 'source-badge';
-      badge.textContent = item.source.toUpperCase();
+      badge.textContent = item.badge || item.source.toUpperCase();
 
       const pinBtn = document.createElement('button');
-      pinBtn.className = 'suggested-pin-btn';
-      pinBtn.textContent = '+ Pin';
-      pinBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await storage.pinShortcut({ title: item.title, url: item.url });
-        this.showToast(`Pinned "${item.title}" to Quick Access`);
-        const modal = document.getElementById('editShortcutModal');
-        modal?.classList.add('hidden');
-        this.renderShortcuts();
-      });
+      pinBtn.className = `suggested-pin-btn ${item.isPinned ? 'pinned' : ''}`;
+      pinBtn.textContent = item.isPinned ? '✓ Pinned' : '+ Pin';
+      if (item.isPinned) {
+        pinBtn.disabled = true;
+      }
 
-      card.addEventListener('click', async () => {
-        await storage.pinShortcut({ title: item.title, url: item.url });
+      const handlePin = async (e: Event) => {
+        e.stopPropagation();
+        if (item.isPinned) return;
+        await storage.pinShortcut({
+          title: item.title,
+          url: item.url,
+          type: item.type,
+          sessionId: item.sessionId,
+          searchQuery: item.searchQuery,
+          tabCount: item.tabCount,
+          actionId: item.actionId,
+        });
+        item.isPinned = true;
         this.showToast(`Pinned "${item.title}" to Quick Access`);
         const modal = document.getElementById('editShortcutModal');
         modal?.classList.add('hidden');
-        this.renderShortcuts();
-      });
+        await this.renderShortcuts();
+      };
+
+      pinBtn.addEventListener('click', handlePin);
+      if (!item.isPinned) {
+        card.addEventListener('click', handlePin);
+      }
 
       right.appendChild(badge);
       right.appendChild(pinBtn);
@@ -1696,6 +1869,10 @@ class PortalNewTabController {
     this.intelSection.classList.remove('hidden');
 
     try {
+      // Load and project registered modules
+      const modules = await moduleRegistry.getModules();
+      this.renderModulesFromRegistry(modules);
+
       const briefing = (await storage.getBriefing()) || (await briefingService.getBriefing());
       const mailSnapshot = (await storage.getMailSnapshot()) || (await briefingService.getMailSnapshot());
       const openClawStatus = (await storage.getOpenClawStatus()) || (await openClawBridge.getCachedStatus());
@@ -1981,6 +2158,28 @@ class PortalNewTabController {
       .replace(/'/g, '&#039;');
   }
 
+  private renderModulesFromRegistry(modules: ModuleDescriptor[]) {
+    // 1. Placement OS
+    const placementMod = modules.find((m) => m.id === 'placement');
+    const placementTag = document.getElementById('placementFreshnessTag');
+    if (placementTag && placementMod) {
+      placementTag.textContent = placementMod.statusText;
+    }
+
+    // 2. AgenticCollab
+    const collabMod = modules.find((m) => m.id === 'agentic_collab');
+    const collabTag = document.getElementById('collabFreshnessTag');
+    if (collabTag && collabMod) {
+      collabTag.textContent = collabMod.statusText;
+    }
+
+    // 3. OpenClaw
+    const openclawMod = modules.find((m) => m.id === 'openclaw');
+    if (openclawMod && this.openclawGatewayLabel) {
+      this.openclawGatewayLabel.textContent = openclawMod.statusText;
+    }
+  }
+
   // --- Intelligence Status Badge ---
 
   private async updateAiStatusBadge() {
@@ -1989,12 +2188,18 @@ class PortalNewTabController {
       const badgeEl = document.getElementById('aiStatusBadge');
       const status = await promptApi.checkStatus();
 
-      if (status.available) {
+      if (status.stage === 'inference_applied') {
         if (labelEl) labelEl.textContent = 'Gemini Nano Active';
-        if (badgeEl) badgeEl.title = 'Chrome on-device Gemini Nano is active and refining suggestions locally.';
+        if (badgeEl) badgeEl.title = status.details || 'Chrome on-device Gemini Nano has refined suggestions locally.';
+      } else if (status.stage === 'model_ready') {
+        if (labelEl) labelEl.textContent = 'Gemini Nano Ready';
+        if (badgeEl) badgeEl.title = 'Chrome on-device model downloaded and ready for local inference.';
+      } else if (status.stage === 'model_downloadable') {
+        if (labelEl) labelEl.textContent = 'Downloading Model...';
+        if (badgeEl) badgeEl.title = 'Chrome is downloading the on-device model component.';
       } else {
-        if (labelEl) labelEl.textContent = 'Intelligent Discovery';
-        if (badgeEl) badgeEl.title = 'Frequency-recency clustering active. 100% on-device & private.';
+        if (labelEl) labelEl.textContent = 'Local Discovery (Deterministic)';
+        if (badgeEl) badgeEl.title = '100% on-device recency/frequency ranking. 0 external network requests.';
       }
     } catch {
       // Safe fallback: never bubble error

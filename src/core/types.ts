@@ -6,7 +6,8 @@ export type ResultType =
   | 'command'
   | 'shortcut'
   | 'ai_cluster'
-  | 'web';
+  | 'web'
+  | 'session';
 
 export interface SearchResult {
   id: string;
@@ -44,6 +45,49 @@ export interface PinnedShortcut {
   url: string;
   customTitle?: string;
   addedAt: number;
+  type?: 'url' | 'session' | 'search' | 'action';
+  sessionId?: string;
+  searchQuery?: string;
+  tabCount?: number;
+  actionId?: string;
+}
+
+export type CandidateSource = 'tab' | 'bookmark' | 'history' | 'session' | 'search';
+
+export interface DestinationCandidate {
+  id: string;
+  title: string;
+  url: string;
+  source: CandidateSource;
+  type: 'url' | 'session' | 'search' | 'action';
+  sessionId?: string;
+  searchQuery?: string;
+  tabCount?: number;
+  actionId?: string;
+  score: number;
+  domain: string;
+  isPinned: boolean;
+  subtitle: string;
+  badge?: string;
+}
+
+export type PromptApiStage =
+  | 'api_unavailable'
+  | 'flag_disabled'
+  | 'model_downloadable'
+  | 'model_ready'
+  | 'session_created'
+  | 'inference_applied'
+  | 'heuristic_deterministic';
+
+export interface PromptApiStatus {
+  available: boolean;
+  model: 'gemini_nano' | 'heuristic_fallback';
+  status: 'readily' | 'after-download' | 'unavailable';
+  stage: PromptApiStage;
+  details?: string;
+  inferenceApplied?: boolean;
+  lastInferenceTime?: number;
 }
 
 export interface DismissedItem {

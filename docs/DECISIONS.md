@@ -211,3 +211,41 @@
   - Filter out generic titles (`Home`, `Sign in`, `Overview`, `Dashboard`, etc.) and fall back to segment-derived names.
 - **Alternative Rejected:** Domain-only grouping or clustering every distinct query parameter.
 - **Impact:** Suggestions represent meaningful user destinations (specific repos, conversations, and docs) rather than generic login or landing pages.
+
+## DEC-033: Typed Destination Semantics (Saved Sessions, Searches & Canonical URLs)
+- **Context:** Earlier shortcut implementations treated all destinations as simple static URLs. When a user pinned a saved browsing session workspace, it either broke or was stored as `url: urls[0]`, navigating only to the first tab upon click and discarding all remaining workspace tabs. Additionally, repeated search queries were lost or forced into mock web page URLs.
+- **Decision:** Extend `PinnedShortcut` and `DestinationCandidate` to support explicit destination types: `type: 'url' | 'session' | 'search' | 'action'`. A session card stores `sessionId` and `tabCount`, rendering with a folder icon and a subtitle indicating `Workspace • X tabs`. Clicking the card triggers `storage.restoreSession(sessionId)` to restore the full tab workspace. Search destinations store `searchQuery` and execute via the default search provider. Already-pinned items are tracked reactively and rendered with a disabled `✓ Pinned` indicator.
+- **Alternative Rejected:** Forcing all shortcuts into single URLs or losing workspace semantics.
+- **Impact:** Workspaces behave as true multi-tab environments; research queries are easily accessible; duplicate pins are prevented.
+
+## DEC-034: Honest Module Registry & Live OpenClaw Port 57849 Probing
+- **Context:** Independent audit revealed that earlier versions claimed integration with external tools via fake `.local` domains (`flowmate.local`, `placement.local`) and fabricated status messages ("All tasks reconciled").
+- **Decision:** Remove all fabricated domains and hardcoded fixtures. Connect `ModuleRegistry` to the real local OpenClaw Gateway on `http://127.0.0.1:57849/health`. When alive, OpenClaw is honestly marked as `connected` ("Gateway Online (127.0.0.1:57849) • Coordinator Ready") with primary URL `http://127.0.0.1:57849/`. When disconnected, offline or unconfigured modules (Flowmate, Placement OS) report truthful guidance with deep links or import options.
+- **Alternative Rejected:** Keeping fabricated `.local` links or hiding external module panels.
+- **Impact:** Total operational transparency. Portal integrates with real local processes when running, and honestly acknowledges when they are not.
+
+## DEC-035: Atomic NTFS Staging Pipeline & Release Locking
+- **Context:** Deploying new builds directly into `dist/` on Windows could fail midway or corrupt files if a build crashed or Chrome was reading from the directory. Furthermore, previous release scripts did not check PowerShell command exit codes (`$LASTEXITCODE`), erroneously reporting success even if `npm run build` failed.
+- **Decision:** Overhaul `scripts/sync-release.ps1` to use an atomic deployment strategy:
+  1. Acquire a deployment lock (`.deploy.lock`) to prevent concurrent executions.
+  2. Pull updates using fast-forward only (`git pull --ff-only`).
+  3. Compile TypeScript and stage output into `dist.staging/`.
+  4. Verify the existence and non-zero size of 5 mandatory artifacts (`manifest.json`, `index.html`, `overlay.js`, `service-worker.js`, `build-metadata.json`).
+  5. Perform an atomic directory rename swap on NTFS: `dist` -> `dist.backup`, `dist.staging` -> `dist`.
+  6. Provide automated rollback on failure and explicit documentation of Chrome MV3 reload limitations.
+- **Alternative Rejected:** Direct in-place overwriting of `dist/` without verification or lockfiles.
+- **Impact:** Completely eliminates broken intermediate builds, guarantees deployment atomicity, and prevents script concurrency conflicts.
+
+## DEC-036: 7-Stage Capability Lifecycle for Chrome Prompt API
+- **Context:** Prompt API status was previously binary (`ready` vs `unavailable`). Checking API availability alone was conflated with model execution, leading to misleading claims that Gemini Nano was "active" when it was merely present.
+- **Decision:** Implement a 7-stage lifecycle in `prompt-api.ts`:
+  1. `api_unavailable`: `LanguageModel` absent from `globalThis`.
+  2. `flag_disabled`: Experimental flag disabled in `chrome://flags`.
+  3. `model_downloadable`: Availability reports `after-download`.
+  4. `model_ready`: Availability reports `readily`.
+  5. `session_created`: Active session successfully instantiated.
+  6. `inference_applied`: Model has actually generated inferences and updated clusters.
+  7. `heuristic_deterministic`: Fallback running offline deterministic clustering.
+  The UI badge reports "Gemini Nano Active" ONLY when `inference_applied` is reached.
+- **Alternative Rejected:** Labeling Gemini Nano active as soon as the API object is detected.
+- **Impact:** Verifiable, completely truthful AI status reporting matching Chrome's actual on-device capability state.
