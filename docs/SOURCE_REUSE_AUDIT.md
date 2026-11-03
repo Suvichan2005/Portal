@@ -83,19 +83,21 @@
 - **Evaluation:** Fuse.js adds 25 KB of minified JS and significant object instantiation overhead on large histories. Portal's token matcher in `ranking.ts` already handles prefix matches, acronyms, and word boundaries with sub-2ms scoring.
 - **Decision:** **REJECT**. Keep Portal's lightweight deterministic token ranking.
 
-### Subsystem 8: WebGL Shaders & Animation Frameworks
-- **External Source:** `tabset/newtab`.
-- **Evaluation:** Massive runtime CPU/GPU drain, violating Portal's Core Mandate 1 (Speed & Lightweight Resource Contract).
-- **Decision:** **REJECT**.
+### Subsystem 8: WebGL Shaders & 3D Canvas Rendering
+- **External Source:** `tabset/newtab` (MIT).
+- **Evaluation:** Tabset utilizes Three.js and custom canvas WebGL shaders for animated background gradients. To adhere strictly to Portal's Core Mandate 1 (ultra-lightweight, native Chrome-speed resource contract with <100ms render budget), Portal rejects 3D canvas runtimes and achieves its minimalist visual aesthetic entirely through standard CSS tokens and container queries.
+- **Decision:** **REJECT CODE / RETAIN CLEAN LAYOUT INSPIRATION**.
 
 ---
 
-## 3. Licensing & Attribution Notice
+## 3. Licensing, Attribution & Provenance Notices
+
+Portal is released under the **MIT License** (see [`LICENSE`](../LICENSE)).
 
 All adapted code patterns originate from repositories under the permissive **MIT License**:
-- `albus-flashquotes/arc` (c) 2024 albus-flashquotes (MIT)
-- `kawamataryo/chikamichi` (c) 2021 Anthony Fu, (c) 2023 Ryo Kawamata (MIT)
-- `dbuezas/chrome-palette` (c) 2023 David Busezas (MIT)
-- `TuYv/pounce` (c) 2025 TuYv (MIT)
+- `albus-flashquotes/arc`: Copyright (c) 2023 albus-flashquotes (MIT)
+- `kawamataryo/chikamichi`: Copyright (c) 2022 Ryo Kawamata (MIT)
+- `dbuezas/chrome-palette`: Copyright (c) 2021 Daniel Buezas (MIT)
+- `TuYv/pounce`: Copyright (c) 2023 TuYv (MIT)
 
-Attribution is maintained in `docs/SOURCE_REUSE_AUDIT.md` and inline source headers. No copyleft (GPL / AGPL) source code was copied or incorporated into Portal.
+Complete copyright and license texts are retained in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). No copyleft (GPL / AGPL) source code was copied or incorporated into Portal. Code adaptations are implemented independently in TypeScript with zero third-party framework dependencies.

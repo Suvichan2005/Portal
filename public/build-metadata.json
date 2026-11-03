@@ -1,16 +1,19 @@
 {
   "version": "1.6.0",
-  "commit": "af372b3d6c2014f263b61a8f744f1fcd88f5372c",
+  "commit": "83a7283fd9f91530140f110a47dd7e0abfef447c",
+  "headCommit": "83a7283fd9f91530140f110a47dd7e0abfef447c",
+  "sourceTreeCommit": "83a7283fd9f91530140f110a47dd7e0abfef447c",
+  "isDirty": true,
   "branch": "feature/portal-next-level",
-  "buildTime": "2026-11-03T09:19:39.726Z",
+  "buildTime": "2026-11-03T14:21:43.919Z",
   "buildHost": "ideapad",
   "targetWorkstation": "thinkbook",
-  "status": "verified",
+  "status": "built",
   "targetDir": "dist",
   "checksums": {
-    "manifest.json": "9445aa553ca84063",
-    "index.html": "ddd2ff10c173abcc",
-    "overlay.js": "3d8f39f2b80780bf",
-    "service-worker.js": "223ac506d49f05d4"
+    "manifest.json": "9445aa553ca84063932def707886317a4756a1f3e1a86f286003c24a61a88bf6",
+    "index.html": "c3415ce08673507a1bc9bfe1e7d68df41fe3498c0d4aeb7c85d6346b2115dc4f",
+    "overlay.js": "f538c60ad59c8f90f32e99af880797a655303db560c50ce8f575603d6d3ecbf1",
+    "service-worker.js": "2c4f1f86e545b36e459c347769926dd8d537c8ef32aae9e6580f3ca62b294bf2"
   }
 }

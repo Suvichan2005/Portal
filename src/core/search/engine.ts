@@ -7,8 +7,74 @@ import { parseDirectUrl, cleanPastedInput } from './url-utils';
 import { parseGrammar, PROVIDER_BANGS, FilterScope } from './grammar';
 
 export class SearchEngine {
+  private bookmarkCache: chrome.bookmarks.BookmarkTreeNode[] | null = null;
+  private bookmarkListenersRegistered = false;
+
   private isExt(): boolean {
     return typeof chrome !== 'undefined' && !!chrome.tabs;
+  }
+
+  private setupBookmarkListeners() {
+    if (this.bookmarkListenersRegistered || typeof chrome === 'undefined' || !chrome.bookmarks) {
+      return;
+    }
+    this.bookmarkListenersRegistered = true;
+    const invalidate = () => {
+      this.bookmarkCache = null;
+    };
+    try {
+      chrome.bookmarks.onCreated?.addListener(invalidate);
+      chrome.bookmarks.onRemoved?.addListener(invalidate);
+      chrome.bookmarks.onChanged?.addListener(invalidate);
+      chrome.bookmarks.onMoved?.addListener(invalidate);
+      chrome.bookmarks.onChildrenReordered?.addListener(invalidate);
+    } catch {}
+  }
+
+  public invalidateBookmarkCache(): void {
+    this.bookmarkCache = null;
+  }
+
+  private async queryBookmarks(q: string): Promise<chrome.bookmarks.BookmarkTreeNode[]> {
+    this.setupBookmarkListeners();
+    if (!this.isExt() || !chrome.bookmarks) return [];
+
+    if (!q) {
+      return new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
+        chrome.bookmarks.getRecent(12, (res) => resolve(res || []));
+      });
+    }
+
+    if (this.bookmarkCache) {
+      const lower = q.toLowerCase();
+      const matches = this.bookmarkCache.filter(
+        (b) => b.url && (b.title.toLowerCase().includes(lower) || b.url.toLowerCase().includes(lower))
+      ).slice(0, 40);
+      return matches;
+    }
+
+    return new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
+      if (chrome.bookmarks.getTree) {
+        chrome.bookmarks.getTree((nodes) => {
+          const flat: chrome.bookmarks.BookmarkTreeNode[] = [];
+          const traverse = (list: chrome.bookmarks.BookmarkTreeNode[]) => {
+            for (const node of list) {
+              if (node.url) flat.push(node);
+              if (node.children) traverse(node.children);
+            }
+          };
+          traverse(nodes || []);
+          this.bookmarkCache = flat;
+          const lower = q.toLowerCase();
+          const matches = flat.filter(
+            (b) => b.url && (b.title.toLowerCase().includes(lower) || b.url.toLowerCase().includes(lower))
+          ).slice(0, 40);
+          resolve(matches);
+        });
+      } else {
+        chrome.bookmarks.search(q, (res) => resolve(res || []));
+      }
+    });
   }
 
   /**
@@ -105,13 +171,8 @@ export class SearchEngine {
       chrome.tabs
         ? chrome.tabs.query({}).catch(() => [])
         : Promise.resolve([]),
-      (filterScope === 'all' || filterScope === 'bookmarks' || filterScope === 'site') &&
-      this.isExt() &&
-      chrome.bookmarks
-        ? new Promise<chrome.bookmarks.BookmarkTreeNode[]>((resolve) => {
-            if (!q) chrome.bookmarks.getRecent(12, resolve);
-            else chrome.bookmarks.search(q, resolve);
-          }).catch(() => [])
+      (filterScope === 'all' || filterScope === 'bookmarks' || filterScope === 'site')
+        ? this.queryBookmarks(q).catch(() => [])
         : Promise.resolve([]),
       (filterScope === 'all' || filterScope === 'history' || filterScope === 'site') &&
       this.isExt() &&

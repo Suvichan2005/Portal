@@ -20,7 +20,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   }
 
   // Preserve previous active element to restore focus on close
-  const previousActiveElement = document.activeElement as HTMLElement | null;
+  let previousActiveElement: HTMLElement | null = null;
 
   // Create host and Shadow Root for complete CSS isolation from the host webpage
   const host = document.createElement('div');
@@ -235,6 +235,45 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       display: flex;
       gap: 12px;
     }
+    .action-menu {
+      padding: 8px 14px;
+      background: rgba(18, 18, 22, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: none;
+    }
+    .action-menu.active {
+      display: block;
+    }
+    .action-menu-header {
+      font-size: 11px;
+      color: #a1a1aa;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .action-menu-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .action-menu-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 5px;
+      font-size: 11px;
+      color: #e4e4e7;
+      cursor: pointer;
+      transition: all 0.1s ease;
+    }
+    .action-menu-chip:hover,
+    .action-menu-chip.selected {
+      background: rgba(99, 102, 241, 0.3);
+      border-color: rgba(99, 102, 241, 0.6);
+      color: #ffffff;
+    }
     .notice-bar {
       font-size: 12px;
       padding: 8px 12px;
@@ -271,6 +310,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   searchIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`;
 
   const input = document.createElement('input');
+  input.id = 'portalOverlayInput';
   input.type = 'text';
   input.className = 'search-input';
   input.placeholder = 'Search tabs, history, bookmarks, or type a URL...';
@@ -296,16 +336,20 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   resultsList.className = 'results-list';
   contentArea.appendChild(resultsList);
 
+  const actionMenu = document.createElement('div');
+  actionMenu.className = 'action-menu';
+
   const footer = document.createElement('div');
   footer.className = 'footer';
   footer.innerHTML = `
     <div class="shortcuts">
       <span><span class="kbd-tag">↑↓</span> Navigate</span>
-      <span><span class="kbd-tag">↵</span> Switch / Open</span>
+      <span><span class="kbd-tag">↵</span> Select</span>
+      <span><span class="kbd-tag">Tab</span> Actions</span>
       <span><span class="kbd-tag">Alt+C</span> Copy Link</span>
       <span><span class="kbd-tag">Alt+M</span> Copy MD</span>
       <span><span class="kbd-tag">Alt+W</span> Close Tab</span>
-      <span><span class="kbd-tag">Esc</span> Close</span>
+      <span><span class="kbd-tag">Esc</span> Dismiss</span>
     </div>
     <div>Portal Launcher</div>
   `;
@@ -313,6 +357,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   modal.appendChild(searchRow);
   modal.appendChild(noticeBar);
   modal.appendChild(contentArea);
+  modal.appendChild(actionMenu);
   modal.appendChild(footer);
   scrim.appendChild(modal);
   shadow.appendChild(scrim);
@@ -322,28 +367,90 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
   // State
   let currentResults: SearchResult[] = [];
   let selectedIndex = 0;
+  let isActionMenuOpen = false;
   let initialState: InitialLauncherState | null = null;
   let debounceTimer: any = null;
   let searchSeq = 0;
 
+  function updateActionMenu() {
+    if (!isActionMenuOpen) {
+      actionMenu.classList.remove('active');
+      return;
+    }
+    const current = currentResults[selectedIndex];
+    if (!current) {
+      isActionMenuOpen = false;
+      actionMenu.classList.remove('active');
+      return;
+    }
+    actionMenu.classList.add('active');
+    actionMenu.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'action-menu-header';
+    header.textContent = `Actions for "${current.title.substring(0, 45)}"`;
+    actionMenu.appendChild(header);
+
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'action-menu-items';
+
+    const chips: { key: string; label: string; action: () => void }[] = [];
+    if (current.url) {
+      chips.push({ key: 'C', label: 'Copy Link', action: () => executeCopyUrl(current) });
+      chips.push({ key: 'M', label: 'Copy Markdown', action: () => executeCopyMarkdown(current) });
+    }
+    if (current.type === 'tab' && current.tabId) {
+      chips.push({ key: 'D', label: 'Duplicate Tab', action: () => executeDuplicateTab(current) });
+      chips.push({ key: 'X', label: 'Close Tab', action: () => executeCloseTab(current) });
+      chips.push({ key: 'P', label: current.pinned ? 'Unpin Tab' : 'Pin Tab', action: () => executeTogglePin(current) });
+      chips.push({ key: 'U', label: current.muted ? 'Unmute Tab' : 'Mute Tab', action: () => executeToggleMute(current) });
+    }
+
+    chips.forEach((c) => {
+      const chip = document.createElement('button');
+      chip.className = 'action-menu-chip';
+      chip.innerHTML = `<span class="kbd-tag">${c.key}</span> ${c.label}`;
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isActionMenuOpen = false;
+        updateActionMenu();
+        c.action();
+      });
+      itemsDiv.appendChild(chip);
+    });
+    actionMenu.appendChild(itemsDiv);
+  }
+
   function openOverlay() {
+    previousActiveElement = document.activeElement as HTMLElement | null;
     host.style.display = 'block';
     window.addEventListener('keydown', handleGlobalKeydown, true);
     input.value = '';
+    currentResults = [];
+    selectedIndex = 0;
+    isActionMenuOpen = false;
+    updateActionMenu();
     fetchInitialState();
     ensureFocus();
+    requestAnimationFrame(ensureFocus);
+    setTimeout(ensureFocus, 25);
+    setTimeout(ensureFocus, 80);
   }
 
-  // Cleanup helper: thoroughly releases every listener and hides/unmounts DOM
   function closeOverlay() {
     clearTimeout(debounceTimer);
     window.removeEventListener('keydown', handleGlobalKeydown, true);
     host.style.display = 'none';
+    isActionMenuOpen = false;
+    updateActionMenu();
     if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
       try {
-        previousActiveElement.focus();
+        if (document.body.contains(previousActiveElement)) {
+          previousActiveElement.focus();
+        }
       } catch {}
     }
+    previousActiveElement = null;
   }
 
   function toggleOverlay() {
@@ -354,32 +461,134 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
     }
   }
 
-  // Register cleanup and toggle on host node so subsequent toggle-offs invoke it cleanly
   (host as any).__portalClose = closeOverlay;
   (host as any).__portalToggle = toggleOverlay;
 
-  // Listen for message-based instant toggle from service worker (<15ms)
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'PORTAL_TOGGLE_OVERLAY') {
       toggleOverlay();
       sendResponse({ handled: true, isOpen: host.style.display !== 'none' });
-      return true;
+      return false;
     }
   });
 
-  // Scrim click closes
   scrim.addEventListener('click', (e) => {
     if (e.target === scrim) {
       closeOverlay();
     }
   });
 
-  function showNotice(msg: string) {
+  function showNotice(msg: string, isError = false) {
     noticeBar.textContent = msg;
     noticeBar.style.display = 'block';
+    if (isError) {
+      noticeBar.style.background = 'rgba(239, 68, 68, 0.15)';
+      noticeBar.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      noticeBar.style.color = '#fca5a5';
+    } else {
+      noticeBar.style.background = 'rgba(99, 102, 241, 0.15)';
+      noticeBar.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+      noticeBar.style.color = '#c7d2fe';
+    }
     setTimeout(() => {
       noticeBar.style.display = 'none';
-    }, 2500);
+    }, 2800);
+  }
+
+  async function safeCopyToClipboard(text: string): Promise<boolean> {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const res = document.execCommand('copy');
+      ta.remove();
+      return res;
+    } catch {
+      return false;
+    }
+  }
+
+  async function executeCopyUrl(target: SearchResult) {
+    if (!target.url) return;
+    const ok = await safeCopyToClipboard(target.url);
+    if (ok) {
+      showNotice(`Copied link: ${target.url}`);
+    } else {
+      showNotice('Failed to copy link to clipboard', true);
+    }
+  }
+
+  async function executeCopyMarkdown(target: SearchResult) {
+    if (!target.url) return;
+    const md = `[${target.title || target.url}](${target.url})`;
+    const ok = await safeCopyToClipboard(md);
+    if (ok) {
+      showNotice(`Copied markdown: ${md}`);
+    } else {
+      showNotice('Failed to copy markdown to clipboard', true);
+    }
+  }
+
+  function executeCloseTab(target: SearchResult) {
+    if (!target.tabId) return;
+    chrome.runtime.sendMessage({ type: 'PORTAL_CLOSE_TAB', tabId: target.tabId }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.success) {
+        showNotice(`Failed to close tab: ${r?.error || chrome.runtime.lastError?.message || 'Unknown error'}`, true);
+        return;
+      }
+      currentResults = currentResults.filter((x) => x.tabId !== target.tabId);
+      if (selectedIndex >= currentResults.length) selectedIndex = Math.max(0, currentResults.length - 1);
+      renderResults();
+      showNotice(`Closed tab: ${target.title}`);
+    });
+  }
+
+  function executeDuplicateTab(target: SearchResult) {
+    if (!target.tabId) return;
+    chrome.runtime.sendMessage({ type: 'PORTAL_DUPLICATE_TAB', tabId: target.tabId }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.success) {
+        showNotice(`Failed to duplicate tab: ${r?.error || chrome.runtime.lastError?.message || 'Unknown error'}`, true);
+        return;
+      }
+      showNotice(`Duplicated tab: ${target.title}`);
+    });
+  }
+
+  function executeTogglePin(target: SearchResult) {
+    if (!target.tabId) return;
+    chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_PIN_TAB', tabId: target.tabId, pinned: !target.pinned }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.success) {
+        showNotice(`Failed to pin tab: ${r?.error || chrome.runtime.lastError?.message || 'Unknown error'}`, true);
+        return;
+      }
+      target.pinned = r.pinned;
+      renderResults();
+      showNotice(r.pinned ? 'Pinned tab' : 'Unpinned tab');
+    });
+  }
+
+  function executeToggleMute(target: SearchResult) {
+    if (!target.tabId) return;
+    chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_MUTE_TAB', tabId: target.tabId, muted: !target.muted }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.success) {
+        showNotice(`Failed to mute tab: ${r?.error || chrome.runtime.lastError?.message || 'Unknown error'}`, true);
+        return;
+      }
+      target.muted = r.muted;
+      renderResults();
+      showNotice(r.muted ? 'Muted tab' : 'Unmuted tab');
+    });
   }
 
   // Render items
@@ -450,11 +659,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         copyBtn.textContent = '🔗';
         copyBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          navigator.clipboard.writeText(res.url!).then(() => {
-            showNotice(`Copied link: ${res.url}`);
-          }).catch(() => {
-            showNotice('Could not copy link');
-          });
+          executeCopyUrl(res);
         });
         actionsDiv.appendChild(copyBtn);
 
@@ -465,12 +670,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         copyMdBtn.textContent = '📋';
         copyMdBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const md = `[${res.title || res.url}](${res.url})`;
-          navigator.clipboard.writeText(md).then(() => {
-            showNotice(`Copied markdown: ${md}`);
-          }).catch(() => {
-            showNotice('Could not copy markdown');
-          });
+          executeCopyMarkdown(res);
         });
         actionsDiv.appendChild(copyMdBtn);
       }
@@ -480,15 +680,11 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         // Duplicate tab button
         const dupBtn = document.createElement('button');
         dupBtn.className = 'action-icon-btn';
-        dupBtn.title = 'Duplicate Tab (Alt+D)';
+        dupBtn.title = 'Duplicate Tab (Tab -> D)';
         dupBtn.textContent = '📑';
         dupBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          chrome.runtime.sendMessage({ type: 'PORTAL_DUPLICATE_TAB', tabId: res.tabId! }, (r) => {
-            if (r?.success) {
-              showNotice(`Duplicated tab: ${res.title}`);
-            }
-          });
+          executeDuplicateTab(res);
         });
         actionsDiv.appendChild(dupBtn);
 
@@ -499,13 +695,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         pinBtn.textContent = res.pinned ? '📌' : '📍';
         pinBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_PIN_TAB', tabId: res.tabId! }, (r) => {
-            if (r?.success) {
-              res.pinned = r.pinned;
-              pinBtn.textContent = r.pinned ? '📌' : '📍';
-              showNotice(r.pinned ? 'Tab pinned' : 'Tab unpinned');
-            }
-          });
+          executeTogglePin(res);
         });
         actionsDiv.appendChild(pinBtn);
 
@@ -516,13 +706,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         muteBtn.textContent = res.muted ? '🔇' : '🔊';
         muteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_MUTE_TAB', tabId: res.tabId! }, (r) => {
-            if (r?.success) {
-              res.muted = r.muted;
-              muteBtn.textContent = r.muted ? '🔇' : '🔊';
-              showNotice(r.muted ? 'Tab muted' : 'Tab unmuted');
-            }
-          });
+          executeToggleMute(res);
         });
         actionsDiv.appendChild(muteBtn);
 
@@ -533,12 +717,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         closeBtn.textContent = '✕';
         closeBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          chrome.runtime.sendMessage({ type: 'PORTAL_CLOSE_TAB', tabId: res.tabId! }, () => {
-            currentResults = currentResults.filter((r) => r.tabId !== res.tabId);
-            if (selectedIndex >= currentResults.length) selectedIndex = Math.max(0, currentResults.length - 1);
-            renderResults();
-            showNotice('Tab closed');
-          });
+          executeCloseTab(res);
         });
         actionsDiv.appendChild(closeBtn);
       }
@@ -590,6 +769,9 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
         item.classList.remove('selected');
       }
     });
+    if (isActionMenuOpen) {
+      updateActionMenu();
+    }
   }
 
   function scrollSelectedIntoView() {
@@ -733,10 +915,77 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
 
   // Keyboard navigation & fast secondary shortcuts
   function handleGlobalKeydown(e: KeyboardEvent) {
+    // If action menu is open, handle single-key action chords or Escape/Tab
+    if (isActionMenuOpen) {
+      if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        isActionMenuOpen = false;
+        updateActionMenu();
+        return;
+      }
+      const keyUpper = e.key.toUpperCase();
+      const current = currentResults[selectedIndex];
+      if (current) {
+        if (keyUpper === 'C' && current.url) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeCopyUrl(current);
+          return;
+        }
+        if (keyUpper === 'M' && current.url) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeCopyMarkdown(current);
+          return;
+        }
+        if (keyUpper === 'D' && current.type === 'tab' && current.tabId) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeDuplicateTab(current);
+          return;
+        }
+        if (keyUpper === 'X' && current.type === 'tab' && current.tabId) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeCloseTab(current);
+          return;
+        }
+        if (keyUpper === 'P' && current.type === 'tab' && current.tabId) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeTogglePin(current);
+          return;
+        }
+        if (keyUpper === 'U' && current.type === 'tab' && current.tabId) {
+          e.preventDefault();
+          isActionMenuOpen = false;
+          updateActionMenu();
+          executeToggleMute(current);
+          return;
+        }
+      }
+    }
+
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       closeOverlay();
+      return;
+    }
+
+    // Toggle Action Menu via Tab or Ctrl+K
+    if (e.key === 'Tab' || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K'))) {
+      e.preventDefault();
+      if (currentResults.length > 0 && selectedIndex >= 0) {
+        isActionMenuOpen = !isActionMenuOpen;
+        updateActionMenu();
+      }
       return;
     }
 
@@ -765,12 +1014,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.type === 'tab' && current.tabId) {
-        chrome.runtime.sendMessage({ type: 'PORTAL_CLOSE_TAB', tabId: current.tabId }, () => {
-          currentResults = currentResults.filter((r) => r.tabId !== current.tabId);
-          if (selectedIndex >= currentResults.length) selectedIndex = Math.max(0, currentResults.length - 1);
-          renderResults();
-          showNotice(`Closed tab: ${current.title}`);
-        });
+        executeCloseTab(current);
       }
       return;
     }
@@ -780,27 +1024,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.type === 'tab' && current.tabId) {
-        chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_PIN_TAB', tabId: current.tabId, pinned: !current.pinned }, (r) => {
-          if (r?.success) {
-            current.pinned = r.pinned;
-            renderResults();
-            showNotice(r.pinned ? 'Pinned tab' : 'Unpinned tab');
-          }
-        });
-      }
-      return;
-    }
-
-    // Secondary shortcut: Alt+D duplicates selected tab
-    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
-      e.preventDefault();
-      const current = currentResults[selectedIndex];
-      if (current && current.type === 'tab' && current.tabId) {
-        chrome.runtime.sendMessage({ type: 'PORTAL_DUPLICATE_TAB', tabId: current.tabId }, (r) => {
-          if (r?.success) {
-            showNotice(`Duplicated tab: ${current.title}`);
-          }
-        });
+        executeTogglePin(current);
       }
       return;
     }
@@ -810,13 +1034,17 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.type === 'tab' && current.tabId) {
-        chrome.runtime.sendMessage({ type: 'PORTAL_TOGGLE_MUTE_TAB', tabId: current.tabId, muted: !current.muted }, (r) => {
-          if (r?.success) {
-            current.muted = r.muted;
-            renderResults();
-            showNotice(r.muted ? 'Muted tab' : 'Unmuted tab');
-          }
-        });
+        executeToggleMute(current);
+      }
+      return;
+    }
+
+    // Secondary shortcut: Alt+C copies URL
+    if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      const current = currentResults[selectedIndex];
+      if (current && current.url) {
+        executeCopyUrl(current);
       }
       return;
     }
@@ -826,12 +1054,7 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
       e.preventDefault();
       const current = currentResults[selectedIndex];
       if (current && current.url) {
-        const md = `[${current.title || current.url}](${current.url})`;
-        navigator.clipboard.writeText(md).then(() => {
-          showNotice(`Copied markdown: ${md}`);
-        }).catch(() => {
-          showNotice('Could not copy markdown');
-        });
+        executeCopyMarkdown(current);
       }
       return;
     }
@@ -901,8 +1124,6 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
     }
   }
 
-  window.addEventListener('keydown', handleGlobalKeydown, true);
-
   // Fetch MRU tabs and preferences from service worker
   function fetchInitialState() {
     chrome.runtime.sendMessage({ type: 'PORTAL_GET_INITIAL_STATE', context: 'overlay' }, (res) => {
@@ -933,15 +1154,12 @@ import { cleanPastedInput, parseDirectUrl } from '../core/search/url-utils';
     });
   }
 
-  fetchInitialState();
-
   // Verified robust focus handoff onto search input
   function ensureFocus() {
     input.focus({ preventScroll: true });
     input.select();
   }
 
-  requestAnimationFrame(ensureFocus);
-  setTimeout(ensureFocus, 25);
-  setTimeout(ensureFocus, 80);
+  // Open overlay on cold injection
+  openOverlay();
 })();

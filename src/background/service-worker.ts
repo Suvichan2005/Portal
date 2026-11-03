@@ -302,37 +302,47 @@ async function handlePortalMessage(message: PortalMessage, sender: chrome.runtim
     }
 
     case 'PORTAL_CLOSE_TAB': {
-      if (message.tabId) {
+      if (!message.tabId) return { success: false, error: 'No tabId provided' };
+      try {
         await chrome.tabs.remove(message.tabId);
-        return { success: true };
+        return { success: true, tabId: message.tabId };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Failed to close tab' };
       }
-      return { success: false, error: 'No tabId provided' };
     }
 
     case 'PORTAL_TOGGLE_PIN_TAB': {
-      if (message.tabId) {
+      if (!message.tabId) return { success: false, error: 'No tabId provided' };
+      try {
         const tab = await chrome.tabs.get(message.tabId);
-        await chrome.tabs.update(message.tabId, { pinned: !tab.pinned });
-        return { success: true, pinned: !tab.pinned };
+        const updated = await chrome.tabs.update(message.tabId, { pinned: !tab.pinned });
+        return { success: true, pinned: updated.pinned };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Failed to toggle tab pin' };
       }
-      return { success: false, error: 'No tabId provided' };
     }
 
     case 'PORTAL_TOGGLE_MUTE_TAB': {
-      if (message.tabId) {
+      if (!message.tabId) return { success: false, error: 'No tabId provided' };
+      try {
         const tab = await chrome.tabs.get(message.tabId);
-        await chrome.tabs.update(message.tabId, { muted: !tab.mutedInfo?.muted });
-        return { success: true, muted: !tab.mutedInfo?.muted };
+        const isMuted = tab.mutedInfo?.muted ?? false;
+        const updated = await chrome.tabs.update(message.tabId, { muted: !isMuted });
+        return { success: true, muted: updated.mutedInfo?.muted };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Failed to toggle tab audio mute' };
       }
-      return { success: false, error: 'No tabId provided' };
     }
 
     case 'PORTAL_DUPLICATE_TAB': {
-      if (message.tabId) {
+      if (!message.tabId) return { success: false, error: 'No tabId provided' };
+      try {
         const dup = await chrome.tabs.duplicate(message.tabId);
-        return { success: true, tabId: dup?.id };
+        if (!dup || !dup.id) return { success: false, error: 'Failed to duplicate tab' };
+        return { success: true, tabId: dup.id };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Failed to duplicate tab' };
       }
-      return { success: false, error: 'No tabId provided' };
     }
 
     case 'PORTAL_SWITCH_TAB': {

@@ -43,6 +43,21 @@ const STORAGE_KEYS = {
 
 class StorageService {
   private memoryFallback = new Map<string, string>();
+  private memoryCache = new Map<string, any>();
+
+  constructor() {
+    if (this.isExtensionEnvironment() && chrome.storage.onChanged) {
+      try {
+        chrome.storage.onChanged.addListener((changes, area) => {
+          if (area === 'local') {
+            for (const key of Object.keys(changes)) {
+              this.memoryCache.delete(key);
+            }
+          }
+        });
+      } catch {}
+    }
+  }
 
   private isExtensionEnvironment(): boolean {
     return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local;
@@ -72,24 +87,32 @@ class StorageService {
   }
 
   async getPreferences(): Promise<UserPreferences> {
+    if (this.memoryCache.has(STORAGE_KEYS.PREFERENCES)) {
+      return this.memoryCache.get(STORAGE_KEYS.PREFERENCES);
+    }
+    let res: UserPreferences;
     if (this.isExtensionEnvironment()) {
-      return new Promise((resolve) => {
+      res = await new Promise((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.PREFERENCES], (result) => {
           resolve({ ...DEFAULT_PREFERENCES, ...(result[STORAGE_KEYS.PREFERENCES] || {}) });
         });
       });
+    } else {
+      try {
+        const stored = this.getRaw(STORAGE_KEYS.PREFERENCES);
+        res = stored ? { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) } : DEFAULT_PREFERENCES;
+      } catch {
+        res = DEFAULT_PREFERENCES;
+      }
     }
-    try {
-      const stored = this.getRaw(STORAGE_KEYS.PREFERENCES);
-      return stored ? { ...DEFAULT_PREFERENCES, ...JSON.parse(stored) } : DEFAULT_PREFERENCES;
-    } catch {
-      return DEFAULT_PREFERENCES;
-    }
+    this.memoryCache.set(STORAGE_KEYS.PREFERENCES, res);
+    return res;
   }
 
   async savePreferences(prefs: Partial<UserPreferences>): Promise<UserPreferences> {
     const current = await this.getPreferences();
     const updated = { ...current, ...prefs };
+    this.memoryCache.set(STORAGE_KEYS.PREFERENCES, updated);
     if (this.isExtensionEnvironment()) {
       return new Promise((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PREFERENCES]: updated }, () => {
@@ -102,19 +125,26 @@ class StorageService {
   }
 
   async getPinnedShortcuts(): Promise<PinnedShortcut[]> {
+    if (this.memoryCache.has(STORAGE_KEYS.PINNED)) {
+      return this.memoryCache.get(STORAGE_KEYS.PINNED);
+    }
+    let res: PinnedShortcut[];
     if (this.isExtensionEnvironment()) {
-      return new Promise((resolve) => {
+      res = await new Promise((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.PINNED], (result) => {
           resolve(result[STORAGE_KEYS.PINNED] || []);
         });
       });
+    } else {
+      try {
+        const stored = this.getRaw(STORAGE_KEYS.PINNED);
+        res = stored ? JSON.parse(stored) : [];
+      } catch {
+        res = [];
+      }
     }
-    try {
-      const stored = this.getRaw(STORAGE_KEYS.PINNED);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    this.memoryCache.set(STORAGE_KEYS.PINNED, res);
+    return res;
   }
 
   async pinShortcut(shortcut: Omit<PinnedShortcut, 'id' | 'addedAt'>): Promise<PinnedShortcut[]> {
@@ -146,6 +176,7 @@ class StorageService {
       updated = [item, ...current].slice(0, 16);
     }
 
+    this.memoryCache.set(STORAGE_KEYS.PINNED, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
@@ -159,6 +190,7 @@ class StorageService {
   async unpinShortcut(idOrUrl: string): Promise<PinnedShortcut[]> {
     const current = await this.getPinnedShortcuts();
     const updated = current.filter((p) => p.id !== idOrUrl && p.url !== idOrUrl);
+    this.memoryCache.set(STORAGE_KEYS.PINNED, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
@@ -175,12 +207,14 @@ class StorageService {
       if (p.id === id) {
         return {
           ...p,
-          ...updates,
-          id: p.id, // preserve id
+          customTitle: updates.customTitle !== undefined ? updates.customTitle : p.customTitle,
+          title: updates.title !== undefined ? updates.title : p.title,
+          url: updates.url !== undefined ? updates.url : p.url,
         };
       }
       return p;
     });
+    this.memoryCache.set(STORAGE_KEYS.PINNED, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.PINNED]: updated }, () => resolve());
@@ -229,25 +263,33 @@ class StorageService {
   }
 
   async getAliases(): Promise<CustomAlias[]> {
+    if (this.memoryCache.has(STORAGE_KEYS.ALIASES)) {
+      return this.memoryCache.get(STORAGE_KEYS.ALIASES);
+    }
+    let res: CustomAlias[];
     if (this.isExtensionEnvironment()) {
-      return new Promise((resolve) => {
+      res = await new Promise((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.ALIASES], (result) => {
           resolve(result[STORAGE_KEYS.ALIASES] || []);
         });
       });
+    } else {
+      try {
+        const stored = this.getRaw(STORAGE_KEYS.ALIASES);
+        res = stored ? JSON.parse(stored) : [];
+      } catch {
+        res = [];
+      }
     }
-    try {
-      const stored = this.getRaw(STORAGE_KEYS.ALIASES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    this.memoryCache.set(STORAGE_KEYS.ALIASES, res);
+    return res;
   }
 
   async saveAlias(alias: CustomAlias): Promise<CustomAlias[]> {
     const current = await this.getAliases();
     const filtered = current.filter((a) => a.keyword.toLowerCase() !== alias.keyword.toLowerCase());
     const updated = [alias, ...filtered].slice(0, 50);
+    this.memoryCache.set(STORAGE_KEYS.ALIASES, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.ALIASES]: updated }, () => resolve());
@@ -284,6 +326,7 @@ class StorageService {
   }
 
   async clearDerivedData(): Promise<void> {
+    this.memoryCache.clear();
     if (this.isExtensionEnvironment()) {
       return new Promise((resolve) => {
         chrome.storage.local.remove(
@@ -393,19 +436,26 @@ class StorageService {
 
   // --- Saved Browsing Workspaces & Recoverable Sessions ---
   async getSavedSessions(): Promise<SavedSession[]> {
+    if (this.memoryCache.has(STORAGE_KEYS.SESSIONS)) {
+      return this.memoryCache.get(STORAGE_KEYS.SESSIONS);
+    }
+    let res: SavedSession[];
     if (this.isExtensionEnvironment()) {
-      return new Promise((resolve) => {
+      res = await new Promise((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.SESSIONS], (result) => {
           resolve(result[STORAGE_KEYS.SESSIONS] || []);
         });
       });
+    } else {
+      try {
+        const stored = this.getRaw(STORAGE_KEYS.SESSIONS);
+        res = stored ? JSON.parse(stored) : [];
+      } catch {
+        res = [];
+      }
     }
-    try {
-      const stored = this.getRaw(STORAGE_KEYS.SESSIONS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    this.memoryCache.set(STORAGE_KEYS.SESSIONS, res);
+    return res;
   }
 
   async getSessionById(id: string): Promise<SavedSession | null> {
@@ -446,6 +496,7 @@ class StorageService {
 
     // Capacity up to 100 sessions to avoid premature silent dropping
     const updated = [session, ...existing].slice(0, 100);
+    this.memoryCache.set(STORAGE_KEYS.SESSIONS, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
@@ -463,6 +514,7 @@ class StorageService {
     const target = existing.find((s) => s.id === id);
     if (!target) return null;
     target.name = trimmed;
+    this.memoryCache.set(STORAGE_KEYS.SESSIONS, existing);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: existing }, () => resolve());
@@ -477,6 +529,7 @@ class StorageService {
     const existing = await this.getSavedSessions();
     const updated = existing.filter((s) => s.id !== id);
     if (updated.length === existing.length) return false;
+    this.memoryCache.set(STORAGE_KEYS.SESSIONS, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.SESSIONS]: updated }, () => resolve());
@@ -507,19 +560,26 @@ class StorageService {
   }
 
   async getRecentCommandIds(): Promise<string[]> {
+    if (this.memoryCache.has(STORAGE_KEYS.COMMAND_RECENCY)) {
+      return this.memoryCache.get(STORAGE_KEYS.COMMAND_RECENCY);
+    }
+    let res: string[];
     if (this.isExtensionEnvironment()) {
-      return new Promise((resolve) => {
-        chrome.storage.local.get([STORAGE_KEYS.COMMAND_RECENCY], (res) => {
-          resolve(res[STORAGE_KEYS.COMMAND_RECENCY] || []);
+      res = await new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.COMMAND_RECENCY], (result) => {
+          resolve(result[STORAGE_KEYS.COMMAND_RECENCY] || []);
         });
       });
+    } else {
+      try {
+        const stored = this.getRaw(STORAGE_KEYS.COMMAND_RECENCY);
+        res = stored ? JSON.parse(stored) : [];
+      } catch {
+        res = [];
+      }
     }
-    try {
-      const stored = this.getRaw(STORAGE_KEYS.COMMAND_RECENCY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    this.memoryCache.set(STORAGE_KEYS.COMMAND_RECENCY, res);
+    return res;
   }
 
   async recordCommandExecution(commandId: string): Promise<void> {
@@ -527,6 +587,7 @@ class StorageService {
     if (!trimmed) return;
     const current = await this.getRecentCommandIds();
     const updated = [trimmed, ...current.filter((id) => id !== trimmed)].slice(0, 20);
+    this.memoryCache.set(STORAGE_KEYS.COMMAND_RECENCY, updated);
     if (this.isExtensionEnvironment()) {
       await new Promise<void>((resolve) => {
         chrome.storage.local.set({ [STORAGE_KEYS.COMMAND_RECENCY]: updated }, () => resolve());

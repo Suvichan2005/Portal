@@ -140,20 +140,33 @@ try {
     if (Test-Path $BackupPath) {
         Remove-Item -Recurse -Force $BackupPath
     }
-    if (Test-Path $DistPath) {
-        Rename-Item -Path $DistPath -NewName "dist.backup"
+    
+    # Resilient directory swap with recovery
+    $swapSuccess = $false
+    try {
+        if (Test-Path $DistPath) {
+            Rename-Item -Path $DistPath -NewName "dist.backup" -ErrorAction Stop
+        }
+        Rename-Item -Path $StagingPath -NewName "dist" -ErrorAction Stop
+        $swapSuccess = $true
+    } catch {
+        Write-Host "Warning: Initial rename encountered issue, checking state: $($_.Exception.Message)" -ForegroundColor Yellow
+        if ((Test-Path $BackupPath) -and (-not (Test-Path $DistPath))) {
+            Rename-Item -Path $BackupPath -NewName "dist" -Force
+        }
+        throw "Directory swap failed and was safely restored: $($_.Exception.Message)"
     }
-    Rename-Item -Path $StagingPath -NewName "dist"
     Write-Host "      Atomic swap complete. Staged build is now active in dist/." -ForegroundColor Green
 
     $MetadataPath = Join-Path $PortalRoot "dist\build-metadata.json"
     if (Test-Path $MetadataPath) {
         $Meta = Get-Content $MetadataPath | ConvertFrom-Json
+        $CommitDisplay = if ($Meta.commit) { $Meta.commit.Substring(0, [math]::Min(7, $Meta.commit.Length)) } else { "unknown" }
         Write-Host ""
         Write-Host "==========================================================" -ForegroundColor Green
         Write-Host "  PORTAL ATOMIC DEPLOYMENT SUCCESSFUL" -ForegroundColor Green
         Write-Host "  Version:       v$($Meta.version)" -ForegroundColor White
-        Write-Host "  Commit:        $($Meta.commit.Substring(0,7))" -ForegroundColor White
+        Write-Host "  Commit:        $CommitDisplay" -ForegroundColor White
         Write-Host "  Timestamp:     $($Meta.buildTime)" -ForegroundColor White
         Write-Host "  Deployment:    Atomic NTFS Swap Verified" -ForegroundColor White
         Write-Host "  Deploy Target: ThinkBook Workstation" -ForegroundColor White
@@ -163,7 +176,8 @@ try {
         Write-Host "  Chrome Manifest V3 security prevents unattended extension reload" -ForegroundColor Gray
         Write-Host "  from external processes without active remote debugging." -ForegroundColor Gray
         Write-Host "  To activate the new build:" -ForegroundColor White
-        Write-Host "  1. Visit chrome://extensions and click reload icon on Portal," -ForegroundColor White
+        Write-Host "  1. In Portal (New Tab or Overlay), type '/reload' or '/refresh-portal' and press Enter," -ForegroundColor White
+        Write-Host "     OR visit chrome://extensions and click the reload icon on Portal," -ForegroundColor White
         Write-Host "     OR click the subtle reload badge on your Portal New Tab." -ForegroundColor White
         Write-Host "  2. 100% of your preferences, custom shortcuts, and sessions are preserved." -ForegroundColor White
         Write-Host "==========================================================" -ForegroundColor Cyan
@@ -171,7 +185,7 @@ try {
 } catch {
     Write-Host ""
     Write-Host "ERROR ENCOUNTERED DURING DEPLOYMENT: $($_.Exception.Message)" -ForegroundColor Red
-    if (Test-Path $BackupPath -and -not (Test-Path $DistPath)) {
+    if ((Test-Path $BackupPath) -and (-not (Test-Path $DistPath))) {
         Write-Host "Restoring backup build from dist.backup..." -ForegroundColor Yellow
         Rename-Item -Path $BackupPath -NewName "dist"
         Write-Host "Rollback restored successfully. Previous build is active." -ForegroundColor Green

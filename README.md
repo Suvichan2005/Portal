@@ -4,14 +4,39 @@
 
 ![Portal New Tab](docs/screenshots/01-newtab-home.png)
 
-## Core Capabilities in v1.6.0
+## Core Capabilities in v1.6.0 (Reconciled Production Release)
 
-- **Responsible Upstream Pattern Adaptations & Source Reuse**:
-  - **Message-First Delivery Architecture (Adapted from Arc - MIT)**: Background service worker dispatches `PORTAL_TOGGLE_OVERLAY` to existing injected tabs, achieving **25.34 ms warm summon latency** (a 7x speedup over the previous 177ms cold script injection baseline) without persistent background memory overhead.
-  - **Secondary Result Action Items & Markdown Link Copying (Adapted from Chikamichi - MIT)**: Full keyboard and inline action buttons on search results (`Alt+C` Copy URL, `Alt+M` Copy Markdown `[title](url)`, `Alt+D` Duplicate Tab, `Alt+W` Close Tab, `Alt+P` Pin Tab, `Alt+U` Mute Tab).
+- **Strict Omnibox Harmony & Native Chrome Integrity**:
+  - **Zero Omnibox Interference**: On Windows, `Alt+D` is Chrome's native accelerator to focus the address bar. It has been completely eliminated from Portal shortcuts, key listeners, and descriptions to ensure Chrome's native address bar remains 100% uninhibited.
+  - **Inline Action Menu (`Tab` or `Ctrl+K`)**: Summon secondary actions cleanly from keyboard on any search suggestion or open tab. When open, single mnemonic key chips execute actions instantly:
+    - `C`: Copy Link
+    - `M`: Copy Markdown link `[title](url)`
+    - `D`: Duplicate Tab
+    - `X`: Close Tab
+    - `P`: Pin / Unpin Tab
+    - `U`: Mute / Unmute Tab
+    - `Escape` or `Tab`: Dismiss action menu
+  - **Non-Colliding Global Chords**: Fast global shortcuts `Alt+C` (Copy Link), `Alt+M` (Copy Markdown), `Alt+W` (Close Tab), `Alt+P` (Pin), and `Alt+U` (Mute) operate cleanly without colliding with any native browser shortcuts.
+  - **Dynamic Element Focus Tracking**: Dynamically captures active element upon overlay open and cleanly restores focus on close, preventing focus hijacking across host web pages.
+  - **Dual-Layer Safe Clipboard Fallback**: Uses `navigator.clipboard.writeText` with an automatic textarea fallback to guarantee link and markdown copying works across all web pages regardless of iframe focus.
+- **Lightweight In-Memory Caching & Sub-Millisecond Speed**:
+  - **Read-Through Storage Memory Cache**: `StorageService` implements an in-memory `Map<string, any>` cache. `getPreferences()`, `getPinnedShortcuts()`, `getAliases()`, `getSavedSessions()`, and `getRecentCommandIds()` resolve synchronously in $<0.1\text{ ms}$, eliminating repetitive asynchronous storage IPC.
+  - **Cross-Context Cache Invalidation**: `chrome.storage.onChanged` listener automatically purges memory cache keys across tabs and palettes when changes occur.
+  - **Event-Driven Bookmark Cache**: `SearchEngine` queries the bookmark tree once into flattened in-memory cache, hooked to `chrome.bookmarks.onCreated`, `onRemoved`, `onChanged`, `onMoved`, and `onChildrenReordered` for event-driven invalidation.
+- **Responsible Upstream Pattern Adaptations & Source Reuse (MIT)**:
+  - **Message-First Delivery Architecture (Adapted from Arc - MIT)**: Background service worker dispatches `PORTAL_TOGGLE_OVERLAY` via `chrome.tabs.sendMessage` to existing injected tabs, achieving **16.23 ms median warm summon latency** (min: 12.60 ms) without persistent background memory overhead.
   - **Usage-Based Command Recency Ranking (Adapted from chrome-palette - MIT)**: 20-entry LRU recency tracking in `chrome.storage.local`. Habitual commands receive a `+120` score boost to automatically elevate to the top of suggestion lists.
-  - **Ergonomic Keyboard Shortcut Hints (Adapted from Pounce - MIT)**: Persistent footer hints (`↑↓ Navigate`, `↵ Select`, `Alt+C Copy Link`, `Alt+M Copy MD`, `Alt+W Close Tab`, `Esc Dismiss`) rendered on both floating palette and newtab dropdown.
-  - **Attribution & Trust Audit**: Full licensing provenance and adaptation notes documented in [`docs/SOURCE_REUSE_AUDIT.md`](docs/SOURCE_REUSE_AUDIT.md).
+  - **Ergonomic Keyboard Shortcut Hints (Adapted from Pounce - MIT)**: Persistent footer hints (`↑↓ Navigate`, `↵ Select`, `Tab Actions`, `Alt+C Copy Link`, `Alt+M Copy MD`, `Alt+W Close Tab`, `Esc Dismiss`) rendered on both floating palette and newtab dropdown.
+  - **Attribution & Licensing**: Full MIT license in root [`LICENSE`](LICENSE) and detailed upstream notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- **Build Provenance & Atomic Deployment Resilience**:
+  - **Full 64-Character SHA-256 Hashes**: `scripts/generate-metadata.ts` computes complete 64-character SHA-256 hashes for core release bundles (`manifest.json`, `index.html`, `overlay.js`, `service-worker.js`).
+  - **Commit Provenance Tracking**: Records both `headCommit` and `sourceTreeCommit` (`git log -1 --format=%H -- src/ package.json manifest.json`) alongside `isDirty` flag and status.
+  - **Resilient Directory Swap**: `scripts/sync-release.ps1` implements a guarded NTFS directory swap with automatic rollback recovery if any file is held locked.
+  - **1-Click Extension Activation**: `/reload` and `/refresh-portal` command in Portal registry calls `chrome.runtime.reload()`, allowing users to activate newly deployed builds without visiting `chrome://extensions`.
+- **Comprehensive Verification**:
+  - 86 automated tests passing (49 unit tests + 37 E2E tests).
+  - TypeScript strict mode with 0 errors.
+  - 0 unsolicited network requests on cold New Tab navigation (100% offline).
 - **High-Performance Architecture & Storage Invariants**:
   - **History Clustering Batch Pre-fetching**: Replaced per-item async `isDismissed()` calls with an upfront batch in-memory `Set<string>`, eliminating up to 2,000 asynchronous IPC storage calls during history clustering.
   - **Parallel Multi-Source Retrieval**: Search engine queries tabs, bookmarks, history, sessions, aliases, and recent commands concurrently via `Promise.all`, cutting keystroke latency.

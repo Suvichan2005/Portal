@@ -884,4 +884,106 @@ test.describe('Portal v1.1.0 Corrected Real Browser Workflows', () => {
 
     expect(result.handled).toBe(true);
   });
+
+  test('35. Floating Launcher Action Menu toggles with Tab and presents action chips', async () => {
+    const extId = await getExtId(context);
+    const sw = (await context.serviceWorkers())[0];
+    const webPage = await context.newPage();
+    await webPage.goto('https://example.com');
+
+    await injectOverlay(webPage);
+    const host = webPage.locator('#portal-floating-launcher-root');
+    await expect(host).toBeVisible({ timeout: 4000 });
+
+    // Wait for initial results
+    await webPage.waitForFunction(() => {
+      const h = document.getElementById('portal-floating-launcher-root');
+      const items = h?.shadowRoot?.querySelectorAll('.result-item');
+      return items && items.length > 0;
+    }, { timeout: 3000 });
+
+    // Press Tab to open Action Menu
+    await webPage.keyboard.press('Tab');
+
+    // Verify action menu is active
+    const isMenuOpen = await webPage.evaluate(() => {
+      const h = document.getElementById('portal-floating-launcher-root');
+      const menu = h?.shadowRoot?.querySelector('.action-menu');
+      return menu?.classList.contains('active');
+    });
+    expect(isMenuOpen).toBe(true);
+
+    // Press Tab again to dismiss Action Menu
+    await webPage.keyboard.press('Tab');
+    const isMenuClosed = await webPage.evaluate(() => {
+      const h = document.getElementById('portal-floating-launcher-root');
+      const menu = h?.shadowRoot?.querySelector('.action-menu');
+      return !menu?.classList.contains('active');
+    });
+    expect(isMenuClosed).toBe(true);
+  });
+
+  test('36. Full Reopen Cycle: Message toggle closes overlay and reopens with clean focus', async () => {
+    const extId = await getExtId(context);
+    const sw = (await context.serviceWorkers())[0];
+    const webPage = await context.newPage();
+    await webPage.goto('https://example.com');
+
+    await injectOverlay(webPage);
+    const host = webPage.locator('#portal-floating-launcher-root');
+    await expect(host).toBeVisible({ timeout: 4000 });
+
+    // Toggle 1: Close via message
+    const res1 = await sw.evaluate(async (url: string) => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find((t: any) => t.url === url);
+      if (!tab || typeof tab.id !== 'number') return null;
+      return await chrome.tabs.sendMessage(tab.id, { type: 'PORTAL_TOGGLE_OVERLAY' });
+    }, webPage.url());
+
+    expect(res1?.handled).toBe(true);
+    await expect(host).toBeHidden({ timeout: 4000 });
+
+    // Toggle 2: Reopen via message
+    const res2 = await sw.evaluate(async (url: string) => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find((t: any) => t.url === url);
+      if (!tab || typeof tab.id !== 'number') return null;
+      return await chrome.tabs.sendMessage(tab.id, { type: 'PORTAL_TOGGLE_OVERLAY' });
+    }, webPage.url());
+
+    expect(res2?.handled).toBe(true);
+    await expect(host).toBeVisible({ timeout: 4000 });
+
+    const isVisible = await webPage.evaluate(() => {
+      const h = document.getElementById('portal-floating-launcher-root') as HTMLElement | null;
+      return h !== null && h.style.display !== 'none';
+    });
+    expect(isVisible).toBe(true);
+  });
+
+  test('37. Omnibox Non-Interference: Alt+D is never intercepted', async () => {
+    const extId = await getExtId(context);
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/src/newtab/index.html`);
+
+    const searchInput = page.locator('#portalSearchInput');
+    await searchInput.focus();
+    await searchInput.fill('portal');
+
+    // Simulate Alt+D dispatch
+    const defaultPrevented = await page.evaluate(() => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'd',
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const input = document.getElementById('portalSearchInput');
+      return !input?.dispatchEvent(event); // false if default was NOT prevented
+    });
+
+    // Default must NOT be prevented so Chrome omnibox can receive Alt+D
+    expect(defaultPrevented).toBe(false);
+  });
 });

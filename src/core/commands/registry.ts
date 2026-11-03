@@ -165,6 +165,20 @@ export const COMMANDS: BrowserCommand[] = [
     },
   },
   {
+    id: 'reload-extension',
+    title: 'Reload Portal Extension',
+    description: 'Reload and activate latest build from disk without visiting chrome://extensions',
+    category: 'settings',
+    keywords: ['reload', 'restart', 'update', 'refresh', 'activate', 'portal'],
+    execute: async () => {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.reload) {
+        chrome.runtime.reload();
+        return { success: true, message: 'Portal reloaded' };
+      }
+      return { success: false, message: 'chrome.runtime.reload not available in this context' };
+    },
+  },
+  {
     id: 'open-chrome-extensions',
     title: 'Manage Extensions',
     description: 'Open Chrome extension settings and permissions',

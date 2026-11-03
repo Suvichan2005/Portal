@@ -99,12 +99,36 @@ class PortalNewTabController {
   private briefingImportText: HTMLTextAreaElement | null = null;
   private submitImportBtn: HTMLElement | null = null;
 
+  private async safeCopyToClipboard(text: string): Promise<boolean> {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const res = document.execCommand('copy');
+      ta.remove();
+      return res;
+    } catch {
+      return false;
+    }
+  }
+
   async init() {
-    await runStorageMigration().catch(() => {});
     this.bindDomElements();
     this.setupIcons();
     this.setupClock();
     this.setupEventListeners();
+    runStorageMigration().catch(() => {});
     await this.loadPreferences();
 
     // Check Zen Mode state from user preferences or storage
@@ -861,10 +885,8 @@ class PortalNewTabController {
         copyBtn.textContent = '🔗';
         copyBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          navigator.clipboard.writeText(item.url!).then(() => {
-            this.showToast(`Copied link: ${item.url}`);
-          }).catch(() => {
-            this.showToast('Could not copy link');
+          this.safeCopyToClipboard(item.url!).then((ok) => {
+            this.showToast(ok ? `Copied link: ${item.url}` : 'Failed to copy link');
           });
         });
         actionsDiv.appendChild(copyBtn);
@@ -876,10 +898,8 @@ class PortalNewTabController {
         copyMdBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const md = `[${item.title || item.url}](${item.url})`;
-          navigator.clipboard.writeText(md).then(() => {
-            this.showToast(`Copied markdown: ${md}`);
-          }).catch(() => {
-            this.showToast('Could not copy markdown');
+          this.safeCopyToClipboard(md).then((ok) => {
+            this.showToast(ok ? `Copied markdown: ${md}` : 'Failed to copy markdown');
           });
         });
         actionsDiv.appendChild(copyMdBtn);
@@ -894,6 +914,10 @@ class PortalNewTabController {
           e.stopPropagation();
           if (typeof chrome !== 'undefined' && chrome.tabs?.remove) {
             chrome.tabs.remove(item.tabId!, () => {
+              if (chrome.runtime.lastError) {
+                this.showToast(`Failed to close tab: ${chrome.runtime.lastError.message}`);
+                return;
+              }
               this.currentSuggestions = this.currentSuggestions.filter((r) => r.tabId !== item.tabId);
               if (this.selectedSuggestionIndex >= this.currentSuggestions.length) {
                 this.selectedSuggestionIndex = Math.max(0, this.currentSuggestions.length - 1);
@@ -991,6 +1015,10 @@ class PortalNewTabController {
       if (current && current.type === 'tab' && current.tabId) {
         if (typeof chrome !== 'undefined' && chrome.tabs?.remove) {
           chrome.tabs.remove(current.tabId, () => {
+            if (chrome.runtime.lastError) {
+              this.showToast(`Failed to close tab: ${chrome.runtime.lastError.message}`);
+              return;
+            }
             this.currentSuggestions = this.currentSuggestions.filter((r) => r.tabId !== current.tabId);
             if (this.selectedSuggestionIndex >= this.currentSuggestions.length) {
               this.selectedSuggestionIndex = Math.max(0, this.currentSuggestions.length - 1);
@@ -1008,10 +1036,8 @@ class PortalNewTabController {
       e.preventDefault();
       const current = this.currentSuggestions[this.selectedSuggestionIndex];
       if (current && current.url) {
-        navigator.clipboard.writeText(current.url).then(() => {
-          this.showToast(`Copied link: ${current.url}`);
-        }).catch(() => {
-          this.showToast('Could not copy link');
+        this.safeCopyToClipboard(current.url).then((ok) => {
+          this.showToast(ok ? `Copied link: ${current.url}` : 'Failed to copy link');
         });
       }
       return;
@@ -1023,25 +1049,9 @@ class PortalNewTabController {
       const current = this.currentSuggestions[this.selectedSuggestionIndex];
       if (current && current.url) {
         const md = `[${current.title || current.url}](${current.url})`;
-        navigator.clipboard.writeText(md).then(() => {
-          this.showToast(`Copied markdown: ${md}`);
-        }).catch(() => {
-          this.showToast('Could not copy markdown');
+        this.safeCopyToClipboard(md).then((ok) => {
+          this.showToast(ok ? `Copied markdown: ${md}` : 'Failed to copy markdown');
         });
-      }
-      return;
-    }
-
-    // Secondary action: Alt+D duplicates selected open tab
-    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
-      e.preventDefault();
-      const current = this.currentSuggestions[this.selectedSuggestionIndex];
-      if (current && current.type === 'tab' && current.tabId) {
-        if (typeof chrome !== 'undefined' && chrome.tabs?.duplicate) {
-          chrome.tabs.duplicate(current.tabId, () => {
-            this.showToast(`Duplicated tab: ${current.title}`);
-          });
-        }
       }
       return;
     }
@@ -1053,9 +1063,13 @@ class PortalNewTabController {
       if (current && current.type === 'tab' && current.tabId) {
         if (typeof chrome !== 'undefined' && chrome.tabs) {
           chrome.tabs.update(current.tabId, { pinned: !current.pinned }, (tab) => {
-            current.pinned = tab?.pinned;
+            if (chrome.runtime.lastError || !tab) {
+              this.showToast(`Failed to pin tab: ${chrome.runtime.lastError?.message || 'Error'}`);
+              return;
+            }
+            current.pinned = tab.pinned;
             this.renderSuggestions();
-            this.showToast(tab?.pinned ? 'Pinned tab' : 'Unpinned tab');
+            this.showToast(tab.pinned ? 'Pinned tab' : 'Unpinned tab');
           });
         }
       }
